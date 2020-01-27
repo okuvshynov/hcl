@@ -52,8 +52,8 @@ impl<'a> Widget for Charts<'a> {
 
                 let y = area.top() + i as u16 * 2;
 
-                buf.set_string(area.left(), y + 1, format!("└{}", series.title), default());
-                buf.set_string(area.left(), y, "┌", default());
+                buf.set_string(area.left(), y, format!("┌{}", series.title), default());
+                buf.set_string(area.left(), y + 1, "└", default());
 
                 series
                     .values
@@ -63,7 +63,7 @@ impl<'a> Widget for Charts<'a> {
                     .enumerate()
                     .for_each(|(j, v)| {
                         let c = Column::from_value(scale.run(*v));
-                        buf.get_mut(area.left() + 1 + j as u16, y)
+                        buf.get_mut(area.left() + 1 + j as u16, y + 1)
                             .set_style(c.style)
                             .set_char(c.symbol);
 
@@ -71,7 +71,7 @@ impl<'a> Widget for Charts<'a> {
                         if j == self.state.x.cursor as usize {
                             render_cursor(
                                 area.left() + 1 + j as u16,
-                                y + 1,
+                                y,
                                 &format!("{:.3}", *v),
                                 "|",
                                 buf,

@@ -4,6 +4,9 @@ Horizon charts provide a nice balance between information density and clarity in
 Interactive examples of horizon charts can be found on [observable](https://observablehq.com/@d3/horizon-chart-ii) and, specifically for system monitoring, in [Square's cubism](https://square.github.io/cubism/). 
 
 hcl is a command-line application that reads arbitrary CSV dataset and presents it as an interactive group of horizon charts right in the terminal. 
+You can think of it as a chart version of a ```less +F``` for numeric CSV data.
+
+Obvious use-case of a atop-based load monitor:
 
 ![atop demo](https://github.com/okuvshynov/hcl/raw/master/static/atop.gif "atop demo")
 
@@ -24,7 +27,7 @@ To use the mode, supply -r <frequency_ms> argument:
 $ hcl -r 1000 ./somecsv.sh # read stdout of somecsv.sh, overwrite old data; repeat every 1 second
 ```
 
-An alternative 'incremental' appends whatever is read to each series. It's very natural with a pipe, but can be used with command execution as well - just do not supply -r.
+An alternative 'incremental' mode appends whatever is read to each series. It's very natural with a pipe, but can be used with command execution as well - just do not supply -r.
 ```
 $ some.sh | hcl # read line-by-line and append as soon as the new line arrives.
 ```
@@ -135,17 +138,17 @@ Mouse:
 * Left button click updates cursor location.
 
 Other:
-* p -- pause auto-scroll to new data.
+* p -- pause/resume auto-scroll to new data.
 
 ## Examples
 
-### Basic single-line
+### static CSV file
 
 ```
-echo "a,b\n0,1\n1,2\n2,3\n3,4\n-1,-2\n-3,-4\n-5,-6" | hcl
+cat scripts/sine.csv | hcl 
 ```
 
-Draws two series, with both positive and negative values.
+![static demo](https://github.com/okuvshynov/hcl/raw/master/static/sine.png "static demo")
 
 ### vmstat
 [vmstat](https://linux.die.net/man/8/vmstat) is a convenient tool to monitor current CPU/Memory/IO on Linux/BSD. 
@@ -161,19 +164,37 @@ $ vmstat -n 1 | awk -W interactive -v OFS=',' '{if (NR>1) { $1=$1; print; }}' | 
 [atop](https://linux.die.net/man/1/atop) can be very useful to look into historical data on a single host. In this example [atopsar](https://linux.die.net/man/1/atopsar) reads log files produced by atop and hcl shows CPU/disk/network utilization over the last 1 hour.
 
 ```
-$ hcl -r 1000 -x time -s 'cpu:100,network:500' ./scripts/atop.sh
+$ hcl -r 1000 -x time -s 'cpu:100,network:500' ./scripts/atop/atop.sh
 ```
 
 Every second, hcl will call the aggregation script. Here we can see some of the configuration options in action:
 * -r 1000 tells 'how often to query for new data', in this case, 1000 ms = 1s;
 * -x time -- the name of the column to use for 'x' axis. Usually, that will be some form of time/date;
 * -s -- defines a scale for the series. If series title matches the filter ('cpu') the values will be scaled as if the domain for the values is [0; 100];
-* ./scripts/atop.sh -- represents a script to run to generate the data.
+* ./scripts/atop/atop.sh -- represents a script to run to generate the data.
 
 ![atop demo](https://github.com/okuvshynov/hcl/raw/master/static/atop.gif "atop demo")
 
+
+### dtrace
+
+dtrace could be made work with hcl. The following example is from running dtrace on MacOS 
+
+```
+sudo scripts/dtrace/bitesize1s.d | hcl -x time -s 50
+```
+
+This traces all disk IO events and shows how the distribution of the size of the IO operation is changing over time.
+Series names (1k, 2k, ...) mean 'IO of this size in bytes', and each value in the chart represent 'how many IO operations of this size happened during that second'.
+
+![dtrace demo](https://github.com/okuvshynov/hcl/raw/master/static/dtrace.png "dtrace demo")
+
+### eBPF
+
+TODO: record screenshot/video.
+
 ### perf
-For a more low-level example, [linux perf](https://perf.wiki.kernel.org/index.php/Main_Page) can be used to print out PMU events.
+For CPU counters, [linux perf](https://perf.wiki.kernel.org/index.php/Main_Page) can be used to print out PMU events.
 
 
 ```
@@ -198,7 +219,7 @@ produces a data series with instructions/cycles per each CPU available, writing 
 perf.sh script implodes data into CSV format, which can be visualized with hcl;
 
 ```
-$ scripts/perf.sh | hcl -x time
+$ scripts/perf/perf.sh | hcl -x time
 ```
 
 ![perf demo](https://github.com/okuvshynov/hcl/raw/master/static/perf.gif "perf demo")
@@ -212,6 +233,7 @@ HCL can handle many use-cases, like
 For most such use-cases there're usually better tools available though, hcl is most useful for visualizing the data which is 'right here on the machine'.
 
 ## OS Support & Requirements
-* terminal needs to support Unicode characters: (' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█');
-* font must have block characters available;
+* terminal needs to support Unicode characters;
+* terminal needs to support 256 color mode;
+* font must have block characters available: (' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█');
 * [termion](https://github.com/redox-os/termion) is used for UI, thus, Windows is not supported.
