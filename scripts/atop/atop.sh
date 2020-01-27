@@ -1,7 +1,7 @@
 last_h=`date  "+%R" -d "15 min ago"`
-./scripts/atop_cpu.sh $last_h > /tmp/hcl_atop_cpu
-./scripts/atop_dsk.sh $last_h | awk -F',' '{ print $2 "," $3}'  > /tmp/hcl_atop_dsk
-./scripts/atop_net.sh $last_h | awk -F',' '{ print $2 "," $3}'  > /tmp/hcl_atop_net
+./scripts/atop/atop_cpu.sh $last_h > /tmp/hcl_atop_cpu
+./scripts/atop/atop_dsk.sh $last_h | awk -F',' '{ print $2 "," $3}'  > /tmp/hcl_atop_dsk
+./scripts/atop/atop_net.sh $last_h | awk -F',' '{ print $2 "," $3}'  > /tmp/hcl_atop_net
 cpu_len=`wc -l /tmp/hcl_atop_cpu | awk '{print $1}'`
 dsk_len=`wc -l /tmp/hcl_atop_dsk | awk '{print $1}'`
 net_len=`wc -l /tmp/hcl_atop_net | awk '{print $1}'`
