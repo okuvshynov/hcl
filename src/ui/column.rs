@@ -28,7 +28,12 @@ pub struct Column {
 }
 
 impl Column {
-    pub fn from_value(v: f64) -> Column {
+    fn from_value_impl(
+        v: f64,
+        symbols: &[char],
+        positive_palette: &[Color],
+        negative_palette: &[Color],
+    ) -> Column {
         if v.is_nan() {
             return Column {
                 style: default(),
@@ -36,9 +41,12 @@ impl Column {
             };
         }
         let v = v.min(1.0).max(-1.0);
-        let symbols = &SYMBOLS[..];
         let column_height = symbols.len() - 1;
-        let palette = if v < 0.0 { &RED } else { &GREEN };
+        let palette = if v < 0.0 {
+            &negative_palette
+        } else {
+            &positive_palette
+        };
         let scaled_value = v.abs() * (palette.len() - 1) as f64;
         let mut color_index = scaled_value.div_euclid(1.0).round() as usize;
         let mut scaled_value =
@@ -59,5 +67,9 @@ impl Column {
             style: Style::default().bg(bg).fg(fg),
             symbol: symbols[scaled_value],
         }
+    }
+
+    pub fn from_value(v: f64) -> Column {
+        Column::from_value_impl(v, &SYMBOLS, &GREEN, &RED)
     }
 }
