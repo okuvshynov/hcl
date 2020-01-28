@@ -3,6 +3,9 @@ rust:
   - stable
   - beta
   - nightly
+arch:
+  - amd64
+  - arm64
 jobs:
   allow_failures:
     - rust: nightly
