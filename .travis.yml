@@ -6,7 +6,11 @@ rust:
 arch:
   - amd64
   - arm64
+os:
+  - linux
+  - osx
 jobs:
   allow_failures:
     - rust: nightly
   fast_finish: true
+
