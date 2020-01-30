@@ -1,0 +1,65 @@
+/*
+ * Using BPF to capture wait time in scheduler queue, and plot how the distribution 
+ * changes over time.
+ * This is experimental, and needs some cleanup and more generic way to handle 
+ * printing comma-separated distributions, which is one of the main things I need.
+ * Need to get rid of all magic 16 numbers and generalize.
+ */
+#include <linux/sched.h>
+
+BEGIN {
+	$b = 1;
+	printf("time");
+	unroll(16) {
+		printf(",%d..%d", $b / 2, $b - 1);
+		$b *= 2;
+	}
+	printf("\n");
+}
+
+tracepoint:sched:sched_wakeup,
+tracepoint:sched:sched_wakeup_new
+{
+	@pid_enqueued_at[args->pid] = nsecs;
+}
+
+tracepoint:sched:sched_switch
+{
+	if (args->prev_state == TASK_RUNNING) {
+		@pid_enqueued_at[args->prev_pid] = nsecs;
+	}
+
+	$enq = @pid_enqueued_at[args->next_pid];
+	if ($enq) {
+		$wait_time_us = (nsecs - $enq) / 1000;
+		$bucket = 1;
+		$done = 0;
+		unroll (16) {
+			if ($done == 0 && $bucket > $wait_time_us) {
+				@waited_for[$bucket]++;
+				$done = 1;
+			}
+			$bucket *= 2;
+		}
+		if ($done == 0) {
+			@waited_for[$bucket]++;
+		}
+		delete(@pid_enqueued_at[args->next_pid]);
+	}
+}
+
+interval:s:1 {
+	$b = 1;
+	time("%H:%M:%S");
+	unroll (16) {
+		printf(",%d", @waited_for[$b]);
+		$b *= 2;
+	}	
+	printf("\n");
+	clear(@waited_for);
+}
+
+END {
+	clear(@waited_for);
+	clear(@pid_enqueued_at);
+}
