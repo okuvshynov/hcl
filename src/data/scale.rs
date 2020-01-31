@@ -1,4 +1,7 @@
 use crate::data::metric_parse::metric_parse;
+use crate::data::series::Series;
+
+use std::collections::HashMap;
 use std::f64;
 
 #[derive(Debug)]
@@ -58,36 +61,37 @@ impl Scale {
         Scale::new(a, b, 2.0 * b - a)
     }
 
-    // Find 'decent' scale for given list of values.
+    // creates scale from min/max values. 
+    pub fn from_min_max(mn: f64, mx: f64) -> Result<Scale, ScaleError> {
+        if mn > mx || !mn.is_finite() || !mx.is_finite() {
+            return Err(ScaleError::BadDomainConfig(format!(
+                "mn = {}, mx = {}",
+                mn, mx
+            )));
+        }
+        if mn * mx < 0.0 {
+            return Scale::new(mn, 0.0, mx);
+        }
+        // negative map:
+        if mn < 0.0 {
+            return Scale::new_negative(mn, 0.0);
+        }
+        if mx > 0.0 {
+            return Scale::new_positive(0.0, mx);
+        }
+        Scale::new(-1.0, 0.0, 1.0)
+    }
+
+    // Find 'decent' scale for a given list of values.
     // The logic is following:
     //  - if there's no data at all, return identity map;
     //  - if there's both negative and positive number, map [mn; 0; mx] -> [-1; 0; 1]
     //  - if only negative or positive number present, map [mn; 0] -> [-1; 0] OR [0; mx] -> [0; 1]
-
-    // Error here would indicate a bug in a program.
     pub fn auto(v: &[f64]) -> Scale {
-        match v
-            .iter()
-            .filter(|x| x.is_finite())
-            .fold(None, |acc, x| match acc {
-                None => Some((*x, *x)),
-                Some((mn, mx)) => Some((mn.min(*x), mx.max(*x))),
-            }) {
+        match min_max(v) {
+            // Error here would indicate a bug in a program, so we unwrap
             None => Scale::new(-1.0, 0.0, 1.0).unwrap(), // identity mapping
-            Some((mn, mx)) => {
-                // both positive and negative numbers
-                if mn * mx < 0.0 {
-                    return Scale::new(mn, 0.0, mx).unwrap();
-                }
-                // negative map:
-                if mn < 0.0 {
-                    return Scale::new_negative(mn, 0.0).unwrap();
-                }
-                if mx > 0.0 {
-                    return Scale::new_positive(0.0, mx).unwrap();
-                }
-                Scale::new(-1.0, 0.0, 1.0).unwrap()
-            }
+            Some((mn, mx)) => Scale::from_min_max(mn, mx).unwrap(),
         }
     }
 
@@ -123,31 +127,50 @@ impl Default for Scale {
 }
 
 #[derive(Debug)]
+pub enum ScaleHolder {
+    Regular(Scale),
+    Auto,
+}
+
+impl ScaleHolder {
+    pub fn from_config(conf: &str) -> Result<Self, ScaleError> {
+        if conf == "auto" {
+            Ok(ScaleHolder::Auto)
+        } else {
+            Ok(ScaleHolder::Regular(Scale::from_config(conf)?))
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Scales {
-    scales: Vec<(String, Scale)>,
+    scales: Vec<(String, ScaleHolder)>, // we need to configure 'regular scale' vs 'auto scale'
 }
 
 impl Scales {
     // example config format:  250.0..1000..2000,qps:100000,cpu:0..100
     pub fn from_config(conf: &str) -> Result<Scales, ScaleError> {
-        let mut catch_all: Option<(String, Scale)> = None;
-        let scales: Result<Vec<Option<(String, Scale)>>, ScaleError> = conf
+        let mut catch_all: Option<(String, ScaleHolder)> = None;
+        let scales: Result<Vec<Option<(String, ScaleHolder)>>, ScaleError> = conf
             .split(',')
             .map(|s| {
                 let parts = s.split(':').collect::<Vec<&str>>();
 
                 match parts.len() {
                     1 => {
-                        catch_all = Some(("".to_owned(), Scale::from_config(&parts[0])?));
+                        catch_all = Some(("".to_owned(), ScaleHolder::from_config(&parts[0])?));
                         Ok(None)
                     }
-                    2 => Ok(Some((parts[0].to_owned(), Scale::from_config(&parts[1])?))),
+                    2 => Ok(Some((
+                        parts[0].to_owned(),
+                        ScaleHolder::from_config(&parts[1])?,
+                    ))),
                     _ => Err(ScaleError::BadFormat(conf.to_owned())),
                 }
             })
             .collect();
 
-        let mut res: Vec<(String, Scale)> = scales?.into_iter().filter_map(|v| v).collect();
+        let mut res: Vec<(String, ScaleHolder)> = scales?.into_iter().filter_map(|v| v).collect();
 
         // catch all is last
         if let Some(v) = catch_all {
@@ -157,13 +180,69 @@ impl Scales {
         Ok(Scales { scales: res })
     }
 
+    // returns 'finalized' version where no 'auto' will exist
+    pub fn with_data(&self, series: &[Series]) -> Scales {
+        Scales {
+            scales: {
+                let mut bounds = HashMap::new();
+                series.iter().for_each(|s| {
+                    // if it's autoscale matching the series
+                    if let Some((pattern, ScaleHolder::Auto)) =
+                        self.scales.iter().find(|&(p, _)| s.title.contains(p))
+                    {
+                        // and if there's valid min and max values for the series
+                        if let Some((mn, mx)) = min_max(&s.values) {
+                            bounds
+                                .entry(pattern)
+                                .and_modify(|v: &mut (f64, f64)| {
+                                    v.0 = v.0.min(mn);
+                                    v.1 = v.1.max(mx);
+                                })
+                                .or_insert((mn, mx));
+                        }
+                    }
+                });
+                // TODO: shall auto catch-on group by?
+                // looks like it all good. If there's no scale matching series at all, it still won't match;
+                self.scales
+                    .iter()
+                    .map(|s| match s {
+                        (title, ScaleHolder::Auto) => {
+                            if let Some((mn, mx)) = bounds.get(title) {
+                                (
+                                    title.to_owned(),
+                                    ScaleHolder::Regular(Scale::from_min_max(*mn, *mx).unwrap()),
+                                )
+                            } else {
+                                (title.to_owned(), ScaleHolder::Regular(Scale::default()))
+                            }
+                        }
+                        (title, ScaleHolder::Regular(scale)) => {
+                            (title.to_owned(), ScaleHolder::Regular(*scale))
+                        }
+                    })
+                    .collect()
+            },
+        }
+    }
+
     // finds first one which matches the pattern
     pub fn pick(&self, title: &str) -> Option<Scale> {
         match self.scales.iter().find(|&(p, _)| title.contains(p)) {
-            Some((_, scale)) => Some(*scale),
+            Some((_, ScaleHolder::Regular(scale))) => Some(*scale),
+            Some((_, ScaleHolder::Auto)) => None,
             None => None,
         }
     }
+}
+
+fn min_max(v: &[f64]) -> Option<(f64, f64)> {
+    v.iter()
+        .filter(|x| x.is_finite())
+        .fold(None, |acc, x| match acc {
+            None => Some((*x, *x)),
+            Some((mn, mx)) => Some((mn.min(*x), mx.max(*x))),
+        })
 }
 
 #[cfg(test)]
@@ -225,6 +304,29 @@ mod tests {
     }
 
     #[test]
+    fn scale_auto() {
+        let s = Scale::auto(&vec![-10.0, 20.0]);
+        assert_approx_eq!(s.a, -10.0);
+        assert_approx_eq!(s.b, 0.0);
+        assert_approx_eq!(s.c, 20.0);
+
+        let s = Scale::auto(&vec![0.0]);
+        assert_approx_eq!(s.a, -1.0);
+        assert_approx_eq!(s.b, 0.0);
+        assert_approx_eq!(s.c, 1.0);
+
+        let s = Scale::auto(&vec![]);
+        assert_approx_eq!(s.a, -1.0);
+        assert_approx_eq!(s.b, 0.0);
+        assert_approx_eq!(s.c, 1.0);
+
+        let s = Scale::auto(&vec![-10.0, 20.0, f64::INFINITY]);
+        assert_approx_eq!(s.a, -10.0);
+        assert_approx_eq!(s.b, 0.0);
+        assert_approx_eq!(s.c, 20.0);
+    }
+
+    #[test]
     fn parse_one_scale_and_run() {
         // maps [0; 10k] -> [0; 1]
         let scale10k = Scale::from_config("10k").unwrap();
@@ -270,5 +372,55 @@ mod tests {
         assert_approx_eq!(scales.pick("z").unwrap().run(-250.0), -0.5);
         assert_approx_eq!(scales.pick("w").unwrap().run(-100.0), 0.25);
         assert_approx_eq!(scales.pick("w").unwrap().run(-300.0), -0.25);
+    }
+
+    #[test]
+    fn min_max_test() {
+        let t = min_max(&vec![0.0, 1.0, 2.0]);
+        assert_approx_eq!(t.unwrap().0, 0.0);
+        assert_approx_eq!(t.unwrap().1, 2.0);
+
+        let t = min_max(&vec![0.0]);
+        assert_approx_eq!(t.unwrap().0, 0.0);
+        assert_approx_eq!(t.unwrap().1, 0.0);
+
+        assert_eq!(min_max(&vec![]), None);
+        assert_eq!(min_max(&vec![f64::INFINITY]), None);
+        assert_eq!(min_max(&vec![f64::NEG_INFINITY]), None);
+        assert_eq!(min_max(&vec![f64::NAN]), None);
+
+        let t = min_max(&vec![0.0, f64::NAN]);
+        assert_approx_eq!(t.unwrap().0, 0.0);
+        assert_approx_eq!(t.unwrap().1, 0.0);
+    }
+
+    #[test]
+    fn with_data() {
+        let s = vec![
+            Series {
+                title: "cpu1".to_owned(),
+                values: vec![0.0, 10.0, 11.0, 9.0],
+            },
+            Series {
+                title: "cpu2".to_owned(),
+                values: vec![0.0, 100.0, 11.0, 99.0],
+            },
+            Series {
+                title: "ram_free_mb".to_owned(),
+                values: vec![1111.0, 999.0, 888.0, 99.0],
+            },
+        ];
+        let scales = Scales::from_config("cpu:auto").unwrap();
+        let scales = scales.with_data(&s);
+        // in this case, cpu will be auto, ram will be also 'auto' but separate
+
+        let cpu_scale = scales.pick("cpu1").unwrap();
+        assert_approx_eq!(cpu_scale.a, -100.0);
+        assert_approx_eq!(cpu_scale.b, 0.0);
+        assert_approx_eq!(cpu_scale.c, 100.0);
+        let cpu_scale = scales.pick("cpu2").unwrap();
+        assert_approx_eq!(cpu_scale.a, -100.0);
+        assert_approx_eq!(cpu_scale.b, 0.0);
+        assert_approx_eq!(cpu_scale.c, 100.0);
     }
 }

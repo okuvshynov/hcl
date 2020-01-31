@@ -59,13 +59,13 @@ The scale is a piecewise linear map from an input domain to [-1;0] and [0;1] int
 
 Scales are defined in a comma-separated list, for example
 ```
-0..10,cpu:100,ram:32G
+0..10,cpu:100,ram:32G,cycles:auto
 ```
 There're three scales here, one global [0..10], one with 'cpu' pattern, another with 'ram' pattern.
        
 Input domain for the scale is repesented by two intervals: [a;b] and [b;c].
 [a;b] is mapped to [-1;0] and [b;c] is mapped to [0;1].
-The format for the scale is [a..[b..]]c.
+The format for the scale is '[a..[b..]]c' OR 'auto'.
 Each number can have K/M/G/T suffix to allow 10^3, 10^6, 10^9, 10^12 scaling.
 Examples:
 * 10k          -- [0;10000] -> [0;1]
@@ -93,14 +93,33 @@ Autoscaling is an attempt to provide reasonable default behavior. Autoscaling wo
 * if both positive and negative values are present, find min and max values, and use piecewise mapping [min; 0; max] -> [-1; 0; 1];
 * if only positive numbers present, use [0; max] -> [0; 1] map;
 * if only negative numbers present, use [min; 0] -> [-1; 0] map.
- 
+
+In cases when 'auto' is used explicitly, for example: 'cpu:auto,ram:12G', all series matching 'cpu' would use same scale, computed based on combined data.
+
+For example, we have following input data (load.csv):
+
+```
+cpu#1,cpu#2,ram_free_gb
+50,20,1
+100,20,2,
+50,20,3
+```
+
+If we run ```cat load.csv | hcl```, each series will compute autoscale individually, so:
+  * cpu#1 -> [50,100,50], [0;100] -> [0; 1] will be used, with values transformed to [0.5,1.0,0.5];
+  * cpu#2 -> [20,20,20], [0;20] -> [0; 1] will be used. Values would be [1.0,1.0,1.0] Second cpu will look more 'loaded'.
+  * ram_gb -> [1, 2, 3] -> [0; 3] will be used.
+
+If, instead, we do ```cat load.csv | hcl -s cpu:auto```, both cpu series will be used together, and [0;100] will be used for both.
+In case of cpu load, which often is represented as percentage, it might be easier to just specify 'cpu:100'.
+For counters which might have no obviously good upper bound, auto could be benefitial. 
+For example:
+ * distribution of wait time in scheduler queue
+ * number of context switches
+ * CPU PMU counters: cycles, instructions, cache-misses, etc. There's a way to compute 'theoretical' upper bounds for some of those, but auto often works well.
+
 Autoscale is recomputed on every data update, as new values might change the interval boundaries;
-Autoscaling has its drawbacks, specifically:
-* old data might change its appearance as new data arrives, which could look confusing;
-* if multiple series have similar semantics, like CPU load by core, autoscale won't know that; different scales could be used for different cores, thus, making data visually inconsistent, for example: 
-  * core#1 has load [50,100,50], [0;100] -> [0; 1] will be used, with values transformed to [0.5,1.0,0.5];
-  * core#2 has load [20,20,20], [0;20] -> [0; 1] will be used. Values would be [1.0,1.0,1.0] Second core will look more 'loaded'.
-  
+Autoscaling has its drawbacks, specifically old data might change its appearance as new data arrives, which could look confusing; 
 Thus, it's often a better option to provide scale as an input. '-s core:100' will be sufficient for the example above.
 
 ### Command-line arguments
