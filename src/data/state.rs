@@ -1,6 +1,6 @@
 use crate::app::settings::Settings;
 use crate::app::window::{Window, WindowAdjust};
-use crate::data::scale::Scales;
+use crate::data::scale_config::ScalesConfig;
 use crate::data::series::SeriesSet;
 
 use termion::event::{Key, MouseButton};
@@ -11,7 +11,7 @@ pub struct State {
     pub error_message: Option<String>,
     pub x: Window,
     pub y: Window,
-    pub scales: Option<Scales>,
+    pub scales: Option<ScalesConfig>,
     auto: bool,
 }
 
@@ -26,7 +26,7 @@ impl State {
                 .scales
                 .as_ref()
                 .map(String::as_str)
-                .map(|s| Scales::from_config(s).unwrap()),
+                .map(|s| ScalesConfig::new(s).unwrap()),
             auto: true,
         }
     }

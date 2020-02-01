@@ -38,7 +38,7 @@ impl<'a> Widget for Charts<'a> {
             .state
             .scales
             .as_ref()
-            .map(|s| s.with_data(&self.state.data.y));
+            .map(|s| s.materialize(&self.state.data.y));
 
         // charts
         self.state
