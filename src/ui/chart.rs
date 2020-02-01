@@ -22,7 +22,7 @@ impl<'a> Widget for Charts<'a> {
     fn draw(&mut self, area: Rect, buf: &mut Buffer) {
         EmptyBox::fill(area, buf);
 
-        // effective width
+        // effective width, as 1 character is used for the markers.
         let w = area.width - 1;
 
         let render_cursor = |x: u16, y: u16, label: &str, symbol: &str, buf: &mut Buffer| {
@@ -34,6 +34,12 @@ impl<'a> Widget for Charts<'a> {
             }
         };
 
+        let scales = self
+            .state
+            .scales
+            .as_ref()
+            .map(|s| s.with_data(&self.state.data.y));
+
         // charts
         self.state
             .data
@@ -43,9 +49,7 @@ impl<'a> Widget for Charts<'a> {
             .take(area.height as usize / 2)
             .enumerate()
             .for_each(|(i, series)| {
-                let scale = self
-                    .state
-                    .scales
+                let scale = scales
                     .as_ref()
                     .and_then(|scales| scales.pick(&series.title))
                     .unwrap_or_else(|| Scale::auto(&series.values[..]));
