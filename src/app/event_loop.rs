@@ -8,7 +8,7 @@ use termion::event::{Event, Key, MouseButton, MouseEvent};
 use termion::input::TermRead;
 
 use crate::app::settings::Settings;
-use crate::data::fetcher::{Fetcher, FetcherError};
+use crate::data::fetcher::{FetcherError, FetcherLoop};
 use crate::data::series::SeriesSet;
 use crate::data::state::State;
 use crate::ui;
@@ -29,7 +29,7 @@ pub struct EventLoop {
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Message>,
     state: State,
-    fetcher: Fetcher,
+    fetcher_loop: FetcherLoop,
 }
 
 impl EventLoop {
@@ -43,13 +43,13 @@ impl EventLoop {
         // queue for main event loop
         let (sender, receiver) = mpsc::channel();
 
-        let fetcher = Fetcher::new(sender.clone(), &settings);
+        let fetcher_loop = FetcherLoop::new(sender.clone(), &settings);
 
         let mut event_loop = EventLoop {
             sender,
             receiver,
             state: State::from_settings(&settings),
-            fetcher,
+            fetcher_loop,
         };
 
         // keyboard and mouse listener
@@ -100,7 +100,7 @@ impl EventLoop {
                     // we need to render to show 'error' to user.
                     surface.render(&event_loop.state)?;
                 }
-                Message::Tick => event_loop.fetcher.fetch(),
+                Message::Tick => event_loop.fetcher_loop.fetch(),
                 Message::MousePress((b, x)) => {
                     if event_loop.state.on_mouse_press(
                         b,

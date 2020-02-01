@@ -11,20 +11,20 @@ use std::thread;
 /// Fetcher is responsbile for setting up and maintaining
 /// communication channel between main loop and data reading routines
 /// It spawns a new thread where data reading will happen.
-pub struct Fetcher {
+pub struct FetcherLoop {
     sender_to_fetcher: mpsc::Sender<()>,
 }
 
-impl Fetcher {
+impl FetcherLoop {
     pub fn new(
         sender_to_main_loop: mpsc::Sender<Message>, // where to send fetched ata
         settings: &Settings,
-    ) -> Fetcher {
+    ) -> FetcherLoop {
         let (sender_to_fetcher, receiver_from_main_loop) = mpsc::channel();
-        let mut reader = Reader::new(settings, sender_to_main_loop.clone());
+        let mut fetcher = Fetcher::new(settings, sender_to_main_loop.clone());
         thread::spawn(move || loop {
             if receiver_from_main_loop.recv().is_ok() {
-                match reader.read() {
+                match fetcher.read() {
                     Ok(_) => {}
                     // In this case, we observe the error running the fetch command;
                     // This needs to be represented in UI, so we send 'Error' event
@@ -33,7 +33,7 @@ impl Fetcher {
                 }
             }
         });
-        Fetcher {
+        FetcherLoop {
             sender_to_fetcher: sender_to_fetcher,
         }
     }
@@ -42,16 +42,16 @@ impl Fetcher {
     }
 }
 
-struct Reader {
+struct Fetcher {
     cmd: Option<String>,
     x: XColumn,
     sender_to_main_loop: mpsc::Sender<Message>,
     batch_mode: bool,
 }
 
-impl Reader {
-    pub fn new(settings: &Settings, sender_to_main_loop: mpsc::Sender<Message>) -> Reader {
-        Reader {
+impl Fetcher {
+    pub fn new(settings: &Settings, sender_to_main_loop: mpsc::Sender<Message>) -> Fetcher {
+        Fetcher {
             cmd: settings.cmd.as_ref().map(|v| v.join(" ")),
             x: settings.x.clone(),
             sender_to_main_loop: sender_to_main_loop.clone(),

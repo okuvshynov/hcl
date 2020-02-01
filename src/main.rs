@@ -3,7 +3,7 @@ mod data;
 mod platform;
 mod ui;
 
-use crate::data::scale::Scales;
+use crate::data::scale_config::ScalesConfig;
 use app::settings::{Settings, XColumn};
 use clap::{App, AppSettings, Arg, ArgGroup};
 
@@ -68,10 +68,16 @@ cpu:100,ram:16G,wow_change:95..100..105 will break down into 3 scales.
 Series with titles like 'cpu#1' will match first scale, thus, using [0;100] -> [0;1];
 Series like 'ram_total', 'ram_free', 'ram_cache' will match second.
 Series 'revenue_wow_change' will use [95;100;105] -> [-1;0;1] scale.
+
+It's possible to have autoscale groups configured. This could be very useful when several
+series have same semantics and should share the scale. For example, in
+'cycles:auto,instructions:auto,ram:32G', all series with titles matching 'cycles' 
+will compute one shared scale. Another group of series matching 'instructions' will have 
+another single shared autoscale.
     ",
                 )
                 .validator(|s| {
-                    Scales::from_config(&s)
+                    ScalesConfig::new(&s)
                         .map(|_| ())
                         .map_err(|e| format!("{}", e))
                 })
