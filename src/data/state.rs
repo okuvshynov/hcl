@@ -1,7 +1,7 @@
 use crate::app::settings::Settings;
 use crate::app::window::{Window, WindowAdjust};
 use crate::data::scale_config::ScalesConfig;
-use crate::data::series::SeriesSet;
+use crate::data::series::{SeriesSet, Slice};
 
 use termion::event::{Key, MouseButton};
 
@@ -40,9 +40,9 @@ impl State {
         true
     }
 
-    pub fn append_data(&mut self, d: SeriesSet, width: i64) {
+    pub fn append_slice(&mut self, slice: Slice, width: i64) {
         self.error_message = None;
-        self.data.append(d);
+        self.data.append_slice(slice);
         let mut xm = WindowAdjust::new(self.data.series_size(), width, &mut self.x);
         xm.on_data();
         if self.auto {

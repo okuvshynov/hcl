@@ -9,7 +9,7 @@ use termion::input::TermRead;
 
 use crate::app::settings::Settings;
 use crate::data::fetcher::{FetcherError, FetcherLoop};
-use crate::data::series::SeriesSet;
+use crate::data::series::{SeriesSet, Slice};
 use crate::data::state::State;
 use crate::ui;
 use crate::ui::surface::{Surface, TermSurface};
@@ -19,7 +19,7 @@ pub enum Message {
     KeyPress(Key),
     MousePress((MouseButton, u16)), // button and x
     Data(SeriesSet),
-    AppendData(SeriesSet),
+    DataSlice(Slice),
     Tick,
     FetchError(FetcherError),
 }
@@ -86,9 +86,8 @@ impl EventLoop {
         // main event loop
         loop {
             match event_loop.receiver.recv()? {
-                Message::AppendData(d) => {
-                    event_loop.state.append_data(d, surface.width()?);
-                    surface.render(&event_loop.state)?;
+                Message::DataSlice(s) => {
+                    event_loop.state.append_slice(s, surface.width()?);
                 }
                 Message::Data(d) => {
                     event_loop.state.replace_data(d, surface.width()?);

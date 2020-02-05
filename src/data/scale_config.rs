@@ -5,17 +5,17 @@ use std::collections::HashMap;
 use std::f64;
 
 #[derive(Debug)]
-pub enum ScaleConfigType {
-    Regular(Scale),
+enum ScaleType {
+    Static(Scale),
     Auto,
 }
 
-impl ScaleConfigType {
-    pub fn new(conf: &str) -> Result<ScaleConfigType, ScaleError> {
+impl ScaleType {
+    pub fn new(conf: &str) -> Result<ScaleType, ScaleError> {
         if conf == "auto" {
-            Ok(ScaleConfigType::Auto)
+            Ok(ScaleType::Auto)
         } else {
-            Ok(ScaleConfigType::Regular(Scale::from_config(conf)?))
+            Ok(ScaleType::Static(Scale::from_config(conf)?))
         }
     }
 }
@@ -23,31 +23,33 @@ impl ScaleConfigType {
 #[derive(Debug)]
 pub struct ScaleConfig {
     pattern: String,
-    config: ScaleConfigType,
+    config: ScaleType,
 }
 
 impl ScaleConfig {
     pub fn new(pattern: &str, conf: &str) -> Result<ScaleConfig, ScaleError> {
         Ok(ScaleConfig {
             pattern: pattern.to_owned(),
-            config: ScaleConfigType::new(conf)?,
+            config: ScaleType::new(conf)?,
         })
     }
 
     fn make_scale(&self, bounds: &HashMap<String, (f64, f64)>) -> (String, Scale) {
         match self.config {
-            ScaleConfigType::Auto => {
+            ScaleType::Auto => {
                 if let Some((mn, mx)) = bounds.get(&self.pattern) {
                     (self.pattern.clone(), Scale::from_min_max(*mn, *mx).unwrap())
                 } else {
                     (self.pattern.clone(), Scale::default())
                 }
             }
-            ScaleConfigType::Regular(scale) => (self.pattern.to_owned(), scale),
+            ScaleType::Static(scale) => (self.pattern.to_owned(), scale),
         }
     }
 }
 
+// ScalesConfig reads the config passed and create a list of 'ScaleConfig's.
+// ScaleConfig might be a fully-defined static Scale, or an autoscaling group.
 #[derive(Debug)]
 pub struct ScalesConfig {
     entries: Vec<ScaleConfig>,
@@ -90,7 +92,7 @@ impl ScalesConfig {
             .iter()
             .find(|c| title.contains(&c.pattern))
             .filter(|c| match c.config {
-                ScaleConfigType::Auto => true,
+                ScaleType::Auto => true,
                 _ => false,
             })
     }
@@ -116,6 +118,8 @@ impl ScalesConfig {
         bounds
     }
 
+    // Transforms autoscaling groups to completely defined scales
+    // given the data set.
     pub fn materialize(&self, series: &[Series]) -> Scales {
         Scales::with_scales({
             let bounds = self.bounds(series);

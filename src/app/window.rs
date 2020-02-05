@@ -113,7 +113,7 @@ impl<'a> WindowAdjust<'a> {
     }
 
     // this runs on new data arrival;
-    // if new data is significantly different (or even empty)
+    // if new data is significantly different
     // offset and cursor might not be valid anymore
     pub fn on_data(&mut self) {
         self.move_offset(0);
