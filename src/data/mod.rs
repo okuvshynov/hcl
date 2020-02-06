@@ -5,3 +5,4 @@ pub mod scale_config;
 pub mod schema;
 pub mod series;
 pub mod state;
+pub mod history;

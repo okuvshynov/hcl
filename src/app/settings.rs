@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum Column {
     Index(usize),
     Title(String),

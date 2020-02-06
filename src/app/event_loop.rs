@@ -20,6 +20,7 @@ pub enum Message {
     MousePress((MouseButton, u16)), // button and x
     Data(SeriesSet),
     DataSlice(Slice),
+    AppendDataSet(SeriesSet),
     Tick,
     FetchError(FetcherError),
 }
@@ -88,6 +89,10 @@ impl EventLoop {
             match event_loop.receiver.recv()? {
                 Message::DataSlice(s) => {
                     event_loop.state.append_slice(s, surface.width()?);
+                }
+                Message::AppendDataSet(d) => {
+                    event_loop.state.append_dataset(d, surface.width()?);
+                    surface.render(&event_loop.state)?;
                 }
                 Message::Data(d) => {
                     event_loop.state.replace_data(d, surface.width()?);

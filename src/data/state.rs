@@ -2,12 +2,13 @@ use crate::app::settings::Settings;
 use crate::app::window::{Window, WindowAdjust};
 use crate::data::scale_config::ScalesConfig;
 use crate::data::series::{SeriesSet, Slice};
+use crate::data::history::History;
 
 use termion::event::{Key, MouseButton};
 
 #[derive(Debug)]
 pub struct State {
-    pub data: SeriesSet,
+    pub history: History,
     pub error_message: Option<String>,
     pub x: Window,
     pub y: Window,
@@ -18,7 +19,7 @@ pub struct State {
 impl State {
     pub fn from_settings(settings: &Settings) -> State {
         State {
-            data: SeriesSet::default(),
+            history: History::new(),
             error_message: None,
             x: Window::default(),
             y: Window::default(),
@@ -42,18 +43,30 @@ impl State {
 
     pub fn append_slice(&mut self, slice: Slice, width: i64) {
         self.error_message = None;
-        self.data.append_slice(slice);
-        let mut xm = WindowAdjust::new(self.data.series_size(), width, &mut self.x);
+        let data = self.history.current_mut();
+        data.append_slice(slice);
+        let mut xm = WindowAdjust::new(data.series_size(), width, &mut self.x);
         xm.on_data();
         if self.auto {
             xm.end();
         }
     }
 
+    pub fn append_dataset(&mut self, d: SeriesSet, width: i64) {
+        self.error_message = None;
+        self.history.append(d);
+        if self.is_auto() {
+            self.history.last();
+            let mut xm = WindowAdjust::new(self.history.current().series_size(), width, &mut self.x);
+            xm.on_data();
+            xm.end();
+        }
+    }
+
     pub fn replace_data(&mut self, d: SeriesSet, width: i64) {
         self.error_message = None;
-        self.data = d;
-        let mut xm = WindowAdjust::new(self.data.series_size(), width, &mut self.x);
+        self.history.replace_current(d);
+        let mut xm = WindowAdjust::new(self.history.current().series_size(), width, &mut self.x);
         xm.on_data();
         if self.auto {
             xm.end();
@@ -65,8 +78,9 @@ impl State {
     }
 
     pub fn on_mouse_press(&mut self, b: MouseButton, x: i64, w: i64, h: i64) -> bool {
-        let mut xm = WindowAdjust::new(self.data.series_size(), w, &mut self.x);
-        let mut ym = WindowAdjust::new(self.data.series_count(), h, &mut self.y);
+        let data = self.history.current();
+        let mut xm = WindowAdjust::new(data.series_size(), w, &mut self.x);
+        let mut ym = WindowAdjust::new(data.series_count(), h, &mut self.y);
         match b {
             MouseButton::WheelDown => ym.move_offset(1),
             MouseButton::WheelUp => ym.move_offset(-1),
@@ -76,8 +90,9 @@ impl State {
     }
 
     pub fn on_key_press(&mut self, input: Key, w: i64, h: i64) -> bool {
-        let mut x = WindowAdjust::new(self.data.series_size(), w, &mut self.x);
-        let mut y = WindowAdjust::new(self.data.series_count(), h, &mut self.y);
+        let data = self.history.current();
+        let mut x = WindowAdjust::new(data.series_size(), w, &mut self.x);
+        let mut y = WindowAdjust::new(data.series_count(), h, &mut self.y);
 
         match input {
             // vertical navigation
@@ -101,6 +116,10 @@ impl State {
 
             Key::Char('$') => (x.end() || x.cursor_end()),
             Key::Char('0') => (x.begin() || x.cursor_begin()),
+
+            // time/epoch navigation
+            Key::Char('t') => self.history.forward(),
+            Key::Char('T') => self.history.backward(),
 
             // controls
             Key::Char('p') => self.pause(),

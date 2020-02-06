@@ -33,16 +33,17 @@ impl<'a> Widget for Charts<'a> {
                 buf.set_string(x - cursor.len() as u16 + 1, y, cursor, default());
             }
         };
+        
+        let data = self.state.history.current();
 
         let scales = self
             .state
             .scales
             .as_ref()
-            .map(|s| s.materialize(&self.state.data.y));
+            .map(|s| s.materialize(&data.y));
 
         // charts
-        self.state
-            .data
+        data
             .y
             .iter()
             .skip(self.state.y.offset as usize)
@@ -85,7 +86,7 @@ impl<'a> Widget for Charts<'a> {
             });
 
         // x axis
-        if let Some((_, x)) = &self.state.data.x {
+        if let Some((_, x)) = &data.x {
             let from = self.state.x.offset as usize;
             let to = std::cmp::min(self.state.x.offset as usize + w as usize, x.len());
             let xx = &x[from..to];

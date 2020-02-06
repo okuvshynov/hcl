@@ -23,7 +23,7 @@ impl FetcherLoop {
         settings: &Settings,
     ) -> FetcherLoop {
         let (sender_to_fetcher, receiver_from_main_loop) = mpsc::channel();
-        let mut fetcher = Fetcher::new(settings, sender_to_main_loop.clone());
+        let fetcher = Fetcher::new(settings, sender_to_main_loop.clone());
         thread::spawn(move || loop {
             if receiver_from_main_loop.recv().is_ok() {
                 match fetcher.read() {
@@ -44,12 +44,18 @@ impl FetcherLoop {
     }
 }
 
+enum FetchMode {
+    Incremental, // Read file until EOF, append line by line, as soon as new data arrives.
+    Batch,       // Read file until EOF, send an update after every empty line. New data forms new 'DataSet'
+    Autorefresh, // Read file until EOF, replace all at once, replace whole data. Repeat.
+}
+
 struct Fetcher {
     cmd: Option<String>,
     x: Column,
     epoch: Column,
     sender_to_main_loop: mpsc::Sender<Message>,
-    batch_mode: bool,
+    mode: FetchMode,
 }
 
 impl Fetcher {
@@ -59,18 +65,29 @@ impl Fetcher {
             x: settings.x.clone(),
             epoch: settings.epoch.clone(),
             sender_to_main_loop: sender_to_main_loop.clone(),
-            batch_mode: settings.refresh_rate.as_nanos() > 0,
+            mode : match (settings.refresh_rate.as_nanos() > 0, settings.epoch != Column::None) {
+                (true, _) => FetchMode::Autorefresh,
+                (_, true) => FetchMode::Batch,
+                _ => FetchMode::Incremental
+            }
         }
     }
 
-    pub fn read(&mut self) -> Result<(), FetcherError> {
-        match (self.cmd.as_ref(), self.batch_mode) {
-            (Some(cmd), true) => self.read_batches(spawned_stdout(&cmd)?),
-            (Some(cmd), false) => self.read_lines(spawned_stdout(&cmd)?),
-            (None, _) => {
-                let stdin = stdin();
-                self.read_lines(stdin.lock())
-            }
+    fn read_from(&self, reader: impl Read) -> Result<(), FetcherError> {
+        match self.mode {
+            FetchMode::Incremental => self.read_lines(reader),
+            FetchMode::Batch => self.read_batches(reader),
+            FetchMode::Autorefresh => self.read_all(reader),
+
+        }
+    }
+
+    pub fn read(&self) -> Result<(), FetcherError> {
+        if let Some(cmd) = self.cmd.as_ref() {
+            self.read_from(spawned_stdout(&cmd)?)
+        } else {
+            let stdin = stdin();
+            self.read_from(stdin.lock()) 
         }
     }
 
@@ -90,7 +107,7 @@ impl Fetcher {
                     Some(Ok(l)) if l != "" => data.append_slice(schema.slice(l.split(','))),
                     // This arm is EOF or empty line
                     _ => {
-                        self.sender_to_main_loop.send(Message::Data(data)).unwrap();
+                        self.sender_to_main_loop.send(Message::AppendDataSet(data)).unwrap();
                         break;
                     }
                 }
@@ -126,6 +143,25 @@ impl Fetcher {
                     }
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    // reads until EOF, sends single update
+    fn read_all(&self, reader: impl Read) -> Result<(), FetcherError> {
+        let reader = BufReader::new(reader);
+
+        // each iteration of a loop is a new batch/epoch
+        let mut lines = reader.lines();
+        if let Some(l) = lines.next() {
+            let schema = Schema::new(self.x.clone(), self.epoch.clone(), l?.split(','));
+            let mut data = schema.empty_set();
+
+            for l in lines {
+                data.append_slice(schema.slice(l?.split(',')));
+            }
+            self.sender_to_main_loop.send(Message::Data(data)).unwrap();
         }
 
         Ok(())

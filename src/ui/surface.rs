@@ -47,7 +47,8 @@ where
     }
 
     fn render(&mut self, state: &State) -> Result<(), Error> {
-        let mut data = &state.data.y[state.y.offset as usize..state.data.y.len()];
+        let data = state.history.current();
+        let mut data = &data.y[state.y.offset as usize..data.y.len()];
 
         let h = self.height()? as usize;
         if h < data.len() {

@@ -6,7 +6,8 @@ use tui::layout::Rect;
 use tui::style::Modifier;
 use tui::widgets::Widget;
 
-/// Status  bar is showing information like mode/visible
+/// Status bar is showing information like mode/visible subset of data
+/// And cuurrent 'epoch'.
 pub struct StatusBar<'a> {
     state: &'a State,
     series_displayed: (usize, usize),
@@ -25,6 +26,7 @@ impl<'a> Widget for StatusBar<'a> {
     fn draw(&mut self, area: Rect, buf: &mut Buffer) {
         EmptyBox::fill(area, buf);
 
+        /*
         let message = match (self.state.error_message.as_ref(), self.state.is_auto()) {
             (Some(err), _) => format!("error: {}", err),
             (None, false) => format!("manual scroll"),
@@ -36,7 +38,20 @@ impl<'a> Widget for StatusBar<'a> {
             area.top(),
             &message,
             default().modifier(Modifier::REVERSED),
-        );
+        );*/
+
+        let data = self.state.history.current();
+
+        if let Some(epoch) = &data.epoch {
+            buf.set_string(
+                area.left(),
+                area.top(),
+                &format!("{}", epoch),
+                default().modifier(Modifier::REVERSED),
+            );
+        }
+
+
 
         // series format on the right
         let y = if self.series_displayed.1 > self.series_displayed.0 {
@@ -44,7 +59,7 @@ impl<'a> Widget for StatusBar<'a> {
                 "series {}..{} out of {}",
                 self.series_displayed.0 + 1,
                 self.series_displayed.1,
-                self.state.data.y.len(),
+                data.y.len(),
             )
         } else {
             "no data".to_string()
