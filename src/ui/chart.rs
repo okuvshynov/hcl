@@ -33,18 +33,13 @@ impl<'a> Widget for Charts<'a> {
                 buf.set_string(x - cursor.len() as u16 + 1, y, cursor, default());
             }
         };
-        
+
         let data = self.state.history.current();
 
-        let scales = self
-            .state
-            .scales
-            .as_ref()
-            .map(|s| s.materialize(&data.y));
+        let scales = self.state.scales.as_ref().map(|s| s.materialize(&data.y));
 
         // charts
-        data
-            .y
+        data.y
             .iter()
             .skip(self.state.y.offset as usize)
             .take(area.height as usize / 2)
