@@ -18,7 +18,7 @@ Obvious example of a load monitor:
 $ git clone https://github.com/okuvshynov/hcl.git
 $ cd hcl
 $ cargo build --release
-$ cat scripts/sine.csv | ./target/release/hcl  # test on static data
+$ cat tests/sine.csv | ./target/release/hcl  # test on static data
 ```
 
 ### Binaries
