@@ -47,7 +47,6 @@ impl FetcherLoop {
 struct Fetcher {
     cmd: Option<String>,
     x: Column,
-    epoch: Column,
     sender_to_main_loop: mpsc::Sender<Message>,
     mode: FetchMode,
 }
@@ -57,7 +56,6 @@ impl Fetcher {
         Fetcher {
             cmd: settings.cmd.as_ref().map(|v| v.join(" ")),
             x: settings.x.clone(),
-            epoch: settings.epoch.clone(),
             sender_to_main_loop: sender_to_main_loop.clone(),
             mode: settings.fetch_mode(),
         }
@@ -66,7 +64,6 @@ impl Fetcher {
     fn read_from(&self, reader: impl Read) -> Result<(), FetcherError> {
         match self.mode {
             FetchMode::Incremental => self.read_lines(reader),
-            FetchMode::Batch => self.read_batches(reader),
             FetchMode::Autorefresh(_) => self.read_all(reader),
         }
     }
@@ -80,35 +77,8 @@ impl Fetcher {
         }
     }
 
-    // reading in batches, flush/quit on EOF, flush on empty line.
-    fn read_batches(&self, reader: impl Read) -> Result<(), FetcherError> {
-        let reader = BufReader::new(reader);
-
-        // each iteration of a loop is a new batch/epoch
-        let mut lines = reader.lines();
-        while let Some(l) = lines.next() {
-            let schema = Schema::new(self.x.clone(), self.epoch.clone(), l?.split(','));
-            let mut data = schema.empty_set();
-
-            loop {
-                match lines.next() {
-                    // This arm is 'regular data'
-                    Some(Ok(l)) if l != "" => data.append_slice(schema.slice(l.split(','))),
-                    // This arm is EOF or empty line
-                    _ => {
-                        self.sender_to_main_loop
-                            .send(Message::AppendDataSet(data))
-                            .unwrap();
-                        break;
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     /// Reading lines one by one, sending over as we go.
+    /// We read titles first, then, after empty line, read column names again.
     fn read_lines(&self, reader: impl Read) -> Result<(), FetcherError> {
         let reader = BufReader::new(reader);
 
@@ -116,9 +86,10 @@ impl Fetcher {
         let mut lines = reader.lines();
         while let Some(l) = lines.next() {
             // TODO: no clone
-            let schema = Schema::new(self.x.clone(), self.epoch.clone(), l?.split(','));
+            // schema here needs to represent OLD schema + current schema
+            let schema = Schema::new(self.x.clone(), l?.split(','));
             self.sender_to_main_loop
-                .send(Message::Data(schema.empty_set()))
+                .send(Message::ExtendDataSet(schema.empty_set()))
                 .unwrap();
 
             loop {
@@ -146,7 +117,7 @@ impl Fetcher {
         // each iteration of a loop is a new batch/epoch
         let mut lines = reader.lines();
         if let Some(l) = lines.next() {
-            let schema = Schema::new(self.x.clone(), self.epoch.clone(), l?.split(','));
+            let schema = Schema::new(self.x.clone(), l?.split(','));
             let mut data = schema.empty_set();
 
             for l in lines {

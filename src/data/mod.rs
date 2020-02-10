@@ -1,5 +1,4 @@
 pub mod fetcher;
-pub mod history;
 pub mod metric_parse;
 pub mod scale;
 pub mod scale_config;

@@ -34,7 +34,7 @@ impl<'a> Widget for Charts<'a> {
             }
         };
 
-        let data = self.state.history.current();
+        let data = &self.state.data;
 
         let scales = self.state.scales.as_ref().map(|s| s.materialize(&data.y));
 

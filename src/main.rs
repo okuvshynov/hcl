@@ -109,10 +109,6 @@ another single shared autoscale.
             (None, Some(index)) => Column::Index(index.parse::<usize>().unwrap()),
             _ => Column::None,
         },
-        epoch: match matches.value_of("t") {
-            Some(title) => Column::Title(title.to_owned()),
-            _ => Column::None,
-        },
     };
 
     app::event_loop::EventLoop::start(settings)

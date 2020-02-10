@@ -37,13 +37,6 @@ impl<'a, 'b> Widget for StatusBar<'a, 'b> {
         // refresh_mode [epoch|frequency] | paused/autoscroll
         let mode = match self.settings.fetch_mode() {
             FetchMode::Autorefresh(dur) => format!("refresh every {}ms", dur.as_millis()),
-            FetchMode::Batch => {
-                if let Some(epoch) = &self.state.history.current().epoch {
-                    format!("batch update: {}", epoch)
-                } else {
-                    format!("batch update")
-                }
-            }
             FetchMode::Incremental => format!("inremental"),
         };
 
@@ -66,7 +59,7 @@ impl<'a, 'b> Widget for StatusBar<'a, 'b> {
                 "series {}..{} out of {}",
                 self.series_displayed.0 + 1,
                 self.series_displayed.1,
-                self.state.history.current().y.len(),
+                self.state.data.y.len(),
             )
         } else {
             "no data".to_string()

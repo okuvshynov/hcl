@@ -12,13 +12,11 @@ impl ColumnSchema {
     }
 }
 
-///
 /// Schema represents the way input data is transformed to internal format.
 /// At the moment, schema has only the definition of two special fields: X and Epoch.
 /// Every other field from the input will become a data series.
 pub struct Schema {
     x: Option<ColumnSchema>,
-    epoch: Option<ColumnSchema>,
     // titles should be also stored here.
     titles: Vec<String>,
 }
@@ -27,13 +25,12 @@ impl Schema {
     fn default() -> Schema {
         Schema {
             x: None,
-            epoch: None,
             titles: vec![],
         }
     }
     /// Creates new schema instance, using x/epoch configuration and
     /// titles from the input.
-    pub fn new<'a, I>(x: Column, epoch: Column, titles: I) -> Schema
+    pub fn new<'a, I>(x: Column, titles: I) -> Schema
     where
         I: Iterator<Item = &'a str>,
     {
@@ -42,12 +39,11 @@ impl Schema {
         titles.zip(0..).for_each(|(t, i)| {
             if x.matches(t, i) {
                 res.x = Some(ColumnSchema::new(t.to_owned(), i));
-            } else if epoch.matches(t, i) {
-                res.epoch = Some(ColumnSchema::new(t.to_owned(), i));
             } else {
                 res.titles.push(t.to_owned());
             }
         });
+
         res
     }
 
@@ -55,8 +51,6 @@ impl Schema {
     /// empty series.
     pub fn empty_set(&self) -> SeriesSet {
         SeriesSet {
-            // TODO: when do we get epoch? Only when real data arrives
-            epoch: None,
             x: match self.x {
                 Some(ref x) => Some((x.title.clone(), vec![])),
                 _ => None,
@@ -72,13 +66,10 @@ impl Schema {
         I: Iterator<Item = &'a str>,
     {
         let mut res = Slice::default();
-        input
-            .enumerate()
-            .for_each(|(i, v)| match (&self.x, &self.epoch) {
-                (Some(x), _) if x.index == i => res.x = Some(v.to_owned()),
-                (_, Some(e)) if e.index == i => res.epoch = Some(v.to_owned()),
-                _ => res.y.push(v.trim().parse::<f64>().unwrap_or(std::f64::NAN)),
-            });
+        input.enumerate().for_each(|(i, v)| match &self.x {
+            Some(x) if x.index == i => res.x = Some(v.to_owned()),
+            _ => res.y.push(v.trim().parse::<f64>().unwrap_or(std::f64::NAN)),
+        });
         res
     }
 }
@@ -88,13 +79,8 @@ mod tests {
 
     #[test]
     fn test_schema() {
-        let schema = Schema::new(
-            Column::None,
-            Column::None,
-            vec!["a", "b", "c"].iter().map(|s| *s),
-        );
+        let schema = Schema::new(Column::None, vec!["a", "b", "c"].iter().map(|s| *s));
         let s = schema.empty_set();
-        assert_eq!(s.epoch, None);
         assert_eq!(s.x, None);
         assert_eq!(s.y.len(), 3);
         assert_eq!(s.y[0].title, "a");
@@ -102,27 +88,20 @@ mod tests {
         assert_eq!(s.y[2].title, "c");
 
         let slice = schema.slice(vec!["1", "2", "3"].iter().map(|s| *s));
-        assert_eq!(slice.epoch, None);
         assert_eq!(slice.x, None);
         assert_eq!(slice.y, vec![1.0, 2.0, 3.0]);
     }
 
     #[test]
-    fn test_x_epoch() {
-        let schema = Schema::new(
-            Column::Index(0),
-            Column::Title("b".to_owned()),
-            vec!["a", "b", "c"].iter().map(|s| *s),
-        );
+    fn test_x() {
+        let schema = Schema::new(Column::Index(0), vec!["a", "b", "c"].iter().map(|s| *s));
         let s = schema.empty_set();
-        assert_eq!(s.epoch, None);
         assert_eq!(s.x, Some(("a".to_owned(), vec![])));
-        assert_eq!(s.y.len(), 1);
-        assert_eq!(s.y[0].title, "c");
+        assert_eq!(s.y.len(), 2);
+        assert_eq!(s.y[0].title, "b");
 
         let slice = schema.slice(vec!["1", "2", "3"].iter().map(|s| *s));
-        assert_eq!(slice.epoch, Some("2".to_owned()));
         assert_eq!(slice.x, Some("1".to_owned()));
-        assert_eq!(slice.y, vec![3.0]);
+        assert_eq!(slice.y, vec![2.0, 3.0]);
     }
 }
