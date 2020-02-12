@@ -1,3 +1,5 @@
+use std::iter;
+
 #[derive(Debug, Clone)]
 pub struct Series {
     pub title: String,
@@ -10,6 +12,17 @@ impl Series {
             title: title.to_string(),
             values: vec![],
         }
+    }
+}
+
+pub struct Slice {
+    pub x: Option<String>,
+    pub y: Vec<f64>,
+}
+
+impl Slice {
+    pub fn default() -> Slice {
+        Slice { x: None, y: vec![] }
     }
 }
 
@@ -32,88 +45,46 @@ impl SeriesSet {
         self.y.len() as i64
     }
 
-    pub fn append(&mut self, mut other: SeriesSet) {
-        if let Some((_, xx)) = other.x.as_mut() {
-            if let Some((_, x)) = self.x.as_mut() {
-                x.append(xx);
-            } else {
-                self.x = other.x;
-            }
+    pub fn append_slice(&mut self, slice: Slice) {
+        if let (Some((_, x)), Some(xn)) = (self.x.as_mut(), slice.x.as_ref()) {
+            x.push(xn.to_owned());
         }
-        if self.y.is_empty() {
-            self.y = other.y;
-        } else {
-            self.y
+        // here we pad the slice with 0 (should be NaN?) if it's shorter
+        self.y
+            .iter_mut()
+            .zip(slice.y.iter().chain(iter::repeat(&std::f64::NAN)))
+            .for_each(|(y, v)| y.values.push(*v));
+    }
+
+    // TODO: other assumed to be empty
+    pub fn append_set(&mut self, mut other: SeriesSet) {
+        let old_length = self.series_size();
+        let mut used = vec![false; self.series_count() as usize];
+
+        other.y.iter_mut().for_each(|ns| {
+            ns.values = if let Some((idx, old_series)) = self
+                .y
                 .iter_mut()
-                .zip(other.y.iter_mut())
-                .for_each(|(y, yy)| {
-                    y.values.append(&mut yy.values);
-                });
+                .enumerate()
+                .find(|(_, os)| os.title == ns.title)
+            {
+                used[idx] = true;
+                let mut new_series = vec![];
+                new_series.append(&mut old_series.values);
+                new_series
+            } else {
+                vec![std::f64::NAN; old_length as usize]
+            };
+        });
+
+        let mut i = 0;
+        self.y.retain(|_| !(used[i], i += 1).0);
+
+        other.y.append(&mut self.y);
+        self.y = other.y;
+
+        if let (Some((_, xo)), Some((_, xn))) = (self.x.as_mut(), other.x.as_mut()) {
+            xo.append(xn);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_append_both_present() {
-        let mut current = SeriesSet {
-            x: None,
-            y: vec![
-                Series {
-                    title: "a".to_owned(),
-                    values: vec![1.0],
-                },
-                Series {
-                    title: "b".to_owned(),
-                    values: vec![2.0],
-                },
-            ],
-        };
-        let new = SeriesSet {
-            x: None,
-            y: vec![
-                Series {
-                    title: "a".to_owned(),
-                    values: vec![3.0],
-                },
-                Series {
-                    title: "b".to_owned(),
-                    values: vec![4.0],
-                },
-            ],
-        };
-        current.append(new);
-        assert_eq!(current.y.len(), 2);
-        assert_eq!(current.y[0].values, vec![1.0, 3.0]);
-        assert_eq!(current.y[1].values, vec![2.0, 4.0]);
-    }
-
-    #[test]
-    fn test_append_empty_old() {
-        let mut current = SeriesSet { x: None, y: vec![] };
-        let new = SeriesSet {
-            x: Some(("time".to_owned(), vec!["22:22".to_owned()])),
-            y: vec![
-                Series {
-                    title: "a".to_owned(),
-                    values: vec![3.0],
-                },
-                Series {
-                    title: "b".to_owned(),
-                    values: vec![4.0],
-                },
-            ],
-        };
-        current.append(new);
-        assert_eq!(current.y.len(), 2);
-        assert_eq!(current.y[0].values, vec![3.0]);
-        assert_eq!(current.y[1].values, vec![4.0]);
-        assert_eq!(
-            current.x,
-            Some(("time".to_owned(), vec!["22:22".to_owned()]))
-        );
     }
 }

@@ -34,16 +34,12 @@ impl<'a> Widget for Charts<'a> {
             }
         };
 
-        let scales = self
-            .state
-            .scales
-            .as_ref()
-            .map(|s| s.materialize(&self.state.data.y));
+        let data = &self.state.data;
+
+        let scales = self.state.scales.as_ref().map(|s| s.materialize(&data.y));
 
         // charts
-        self.state
-            .data
-            .y
+        data.y
             .iter()
             .skip(self.state.y.offset as usize)
             .take(area.height as usize / 2)
@@ -85,7 +81,7 @@ impl<'a> Widget for Charts<'a> {
             });
 
         // x axis
-        if let Some((_, x)) = &self.state.data.x {
+        if let Some((_, x)) = &data.x {
             let from = self.state.x.offset as usize;
             let to = std::cmp::min(self.state.x.offset as usize + w as usize, x.len());
             let xx = &x[from..to];

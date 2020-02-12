@@ -37,7 +37,7 @@ impl Column {
         if v.is_nan() {
             return Column {
                 style: default(),
-                symbol: '!',
+                symbol: '.',
             };
         }
         let v = v.min(1.0).max(-1.0);

@@ -1,6 +1,6 @@
-use crate::ui::chart::Charts;
-
+use crate::app::settings::Settings;
 use crate::data::state::State;
+use crate::ui::chart::Charts;
 use crate::ui::status_bar::StatusBar;
 use crate::ui::style::EmptyBox;
 
@@ -13,7 +13,7 @@ use tui::widgets::Widget;
 pub trait Surface {
     fn height(&self) -> Result<i64, Error>;
     fn width(&self) -> Result<i64, Error>;
-    fn render(&mut self, state: &State) -> Result<(), Error>;
+    fn render(&mut self, state: &State, settings: &Settings) -> Result<(), Error>;
 }
 
 // drawing surface; is aware of terminal size and layout
@@ -46,8 +46,9 @@ where
         Ok(self.terminal.size()?.width as i64 - 1)
     }
 
-    fn render(&mut self, state: &State) -> Result<(), Error> {
-        let mut data = &state.data.y[state.y.offset as usize..state.data.y.len()];
+    fn render(&mut self, state: &State, settings: &Settings) -> Result<(), Error> {
+        let data = &state.data;
+        let mut data = &data.y[state.y.offset as usize..data.y.len()];
 
         let h = self.height()? as usize;
         if h < data.len() {
@@ -56,6 +57,7 @@ where
 
         let mut status_bar = StatusBar::new(
             state,
+            settings,
             (
                 state.y.offset as usize,
                 state.y.offset as usize + data.len(),

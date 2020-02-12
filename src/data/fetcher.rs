@@ -1,14 +1,16 @@
 use crate::app::event_loop::Message;
-use crate::app::settings::{Settings, XColumn};
-use crate::data::series_collector::SeriesCollector;
+use crate::app::settings::{Column, FetchMode, Settings};
+use crate::data::schema::Schema;
 use crate::platform::exec::spawned_stdout;
 
 use std::io::stdin;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Read;
 use std::sync::mpsc;
 use std::thread;
 
-/// Fetcher is responsbile for setting up and maintaining
+/// FetcherLoop is responsbile for setting up and maintaining
 /// communication channel between main loop and data reading routines
 /// It spawns a new thread where data reading will happen.
 pub struct FetcherLoop {
@@ -21,7 +23,7 @@ impl FetcherLoop {
         settings: &Settings,
     ) -> FetcherLoop {
         let (sender_to_fetcher, receiver_from_main_loop) = mpsc::channel();
-        let mut fetcher = Fetcher::new(settings, sender_to_main_loop.clone());
+        let fetcher = Fetcher::new(settings, sender_to_main_loop.clone());
         thread::spawn(move || loop {
             if receiver_from_main_loop.recv().is_ok() {
                 match fetcher.read() {
@@ -44,9 +46,9 @@ impl FetcherLoop {
 
 struct Fetcher {
     cmd: Option<String>,
-    x: XColumn,
+    x: Column,
     sender_to_main_loop: mpsc::Sender<Message>,
-    batch_mode: bool,
+    mode: FetchMode,
 }
 
 impl Fetcher {
@@ -55,63 +57,74 @@ impl Fetcher {
             cmd: settings.cmd.as_ref().map(|v| v.join(" ")),
             x: settings.x.clone(),
             sender_to_main_loop: sender_to_main_loop.clone(),
-            batch_mode: settings.refresh_rate.as_nanos() > 0,
+            mode: settings.fetch_mode(),
         }
     }
 
-    pub fn read(&mut self) -> Result<(), FetcherError> {
-        match (self.cmd.as_ref(), self.batch_mode) {
-            (Some(cmd), true) => self.read_once(spawned_stdout(&cmd)?),
-            (Some(cmd), false) => self.keep_reading(spawned_stdout(&cmd)?),
-            (None, _) => {
-                let stdin = stdin();
-                self.keep_reading(stdin.lock())
-            }
+    fn read_from(&self, reader: impl Read) -> Result<(), FetcherError> {
+        match self.mode {
+            FetchMode::Incremental => self.read_lines(reader),
+            FetchMode::Autorefresh(_) => self.read_all(reader),
         }
     }
 
-    // reads and sends updates after each line read
-    fn keep_reading(&self, reader: impl Read) -> Result<(), FetcherError> {
-        let mut reader = csv::Reader::from_reader(reader);
-        let mut collector = SeriesCollector::from_titles(reader.headers()?.iter(), &self.x);
+    pub fn read(&self) -> Result<(), FetcherError> {
+        if let Some(cmd) = self.cmd.as_ref() {
+            self.read_from(spawned_stdout(&cmd)?)
+        } else {
+            let stdin = stdin();
+            self.read_from(stdin.lock())
+        }
+    }
 
-        let mut x = 0;
+    /// Reading lines one by one, sending over as we go.
+    /// We read titles first, then, after empty line, read column names again.
+    fn read_lines(&self, reader: impl Read) -> Result<(), FetcherError> {
+        let reader = BufReader::new(reader);
 
-        for res in reader.records() {
-            collector.one_row(res?.iter());
-            let mut data = collector.current();
-
-            if data.x == None {
-                data.x = Some(("index".to_owned(), vec![format!("{}", x)]));
-                x += 1;
-            }
+        // each iteration of a loop is a new batch/epoch
+        let mut lines = reader.lines();
+        while let Some(l) = lines.next() {
+            // TODO: no clone
+            // schema here needs to represent OLD schema + current schema
+            let schema = Schema::new(self.x.clone(), l?.split(','));
             self.sender_to_main_loop
-                .send(Message::AppendData(data))
+                .send(Message::ExtendDataSet(schema.empty_set()))
                 .unwrap();
+
+            loop {
+                match lines.next() {
+                    // This arm is 'regular data'
+                    Some(Ok(l)) if l != "" => self
+                        .sender_to_main_loop
+                        .send(Message::DataSlice(schema.slice(l.split(','))))
+                        .unwrap(),
+                    // This arm is EOF or empty line
+                    _ => {
+                        break;
+                    }
+                }
+            }
         }
 
         Ok(())
     }
 
-    // reads until EOF, collects to internal series set and sends whole thing.
-    fn read_once(&self, reader: impl Read) -> Result<(), FetcherError> {
-        let mut reader = csv::Reader::from_reader(reader);
-        let mut collector = SeriesCollector::from_titles(reader.headers()?.iter(), &self.x);
+    // reads until EOF, sends single update
+    fn read_all(&self, reader: impl Read) -> Result<(), FetcherError> {
+        let reader = BufReader::new(reader);
 
-        for res in reader.records() {
-            collector.append(res?.iter());
+        // each iteration of a loop is a new batch/epoch
+        let mut lines = reader.lines();
+        if let Some(l) = lines.next() {
+            let schema = Schema::new(self.x.clone(), l?.split(','));
+            let mut data = schema.empty_set();
+
+            for l in lines {
+                data.append_slice(schema.slice(l?.split(',')));
+            }
+            self.sender_to_main_loop.send(Message::Data(data)).unwrap();
         }
-
-        let mut data = collector.current();
-
-        if data.x == None {
-            data.x = Some((
-                "index".to_owned(),
-                (0..data.series_size()).map(|v| format!("{}", v)).collect(),
-            ));
-        }
-
-        self.sender_to_main_loop.send(Message::Data(data)).unwrap();
 
         Ok(())
     }

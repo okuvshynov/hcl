@@ -4,7 +4,7 @@ mod platform;
 mod ui;
 
 use crate::data::scale_config::ScalesConfig;
-use app::settings::{Settings, XColumn};
+use app::settings::{Column, Settings};
 use clap::{App, AppSettings, Arg, ArgGroup};
 
 fn main() -> Result<(), failure::Error> {
@@ -12,6 +12,12 @@ fn main() -> Result<(), failure::Error> {
         .version("0.1")
         .setting(AppSettings::TrailingVarArg)
         .author("Oleksandr K. <okuvshynov@gmail.com>")
+        .arg(
+            Arg::with_name("t")
+                .short("t")
+                .help("name of the field to use for epoch tracking.")
+                .takes_value(true),
+        )
         .arg(
             Arg::with_name("x")
                 .short("x")
@@ -99,9 +105,9 @@ another single shared autoscale.
         refresh_rate: std::time::Duration::from_millis(r),
         scales: matches.value_of("scales").map(ToOwned::to_owned),
         x: match x {
-            (Some(title), None) => XColumn::Title(title.to_owned()),
-            (None, Some(index)) => XColumn::Index(index.parse::<usize>().unwrap()),
-            _ => XColumn::None,
+            (Some(title), None) => Column::Title(title.to_owned()),
+            (None, Some(index)) => Column::Index(index.parse::<usize>().unwrap()),
+            _ => Column::None,
         },
     };
 
