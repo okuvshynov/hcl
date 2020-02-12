@@ -37,7 +37,7 @@ impl<'a, 'b> Widget for StatusBar<'a, 'b> {
         // refresh_mode [epoch|frequency] | paused/autoscroll
         let mode = match self.settings.fetch_mode() {
             FetchMode::Autorefresh(dur) => format!("refresh every {}ms", dur.as_millis()),
-            FetchMode::Incremental => format!("inremental"),
+            FetchMode::Incremental => format!("incremental"),
         };
 
         let message = match (self.state.error_message.as_ref(), self.state.is_auto()) {

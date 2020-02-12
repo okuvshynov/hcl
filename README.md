@@ -47,10 +47,12 @@ Equivalent to
 $ hcl some.sh
 ```
 
+There's a way to modify series set in incremental mode, by inserting empty line and a new set of titles. This can be useful in the cases like 'show top N processes reading from HDD, with 1 second granularity'. Check this simple [example](tests/rt_new_series.sh) which simulates that.
+
 There's an option to use one of the columns in CSV as an 'x' axis. Most commonly that would be some form of
 time/date, but it's not required, it can be an arbitrary string. X is configured using -x <column_title> or -i <column_index_zero_based> options.
 
-All other columns need to have floating-point numbers as their values. Missing values or the ones failed to parse will be represented as '!' (NaN).
+All other columns need to have floating-point numbers as their values. Missing values or the ones failed to parse will be represented as '.' (NaN).
 
 There's no filtering/aggregation functionality. If there's a need to do so, external tools (awk, xsv, sed, ...) should be used before piping the input to hcl.
 
