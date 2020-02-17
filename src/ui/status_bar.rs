@@ -33,8 +33,6 @@ impl<'a, 'b> Widget for StatusBar<'a, 'b> {
     fn draw(&mut self, area: Rect, buf: &mut Buffer) {
         EmptyBox::fill(area, buf);
 
-        // format of status is:
-        // refresh_mode [epoch|frequency] | paused/autoscroll
         let mode = match self.settings.fetch_mode() {
             FetchMode::Autorefresh(dur) => format!("refresh every {}ms", dur.as_millis()),
             FetchMode::Incremental => format!("incremental"),

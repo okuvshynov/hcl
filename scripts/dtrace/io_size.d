@@ -2,7 +2,7 @@
 /* 
  * This script is inspired by bitesize.d 
  * (https://github.com/brendangregg/DTrace-book-scripts/blob/master/Chap4/bitesize.d),
- * but written manually, rather than using aggregations; It is done to allow CSV formatting.
+ * but written manually, rather than using aggregations;
  */
 
 #pragma D option quiet

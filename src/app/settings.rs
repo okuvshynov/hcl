@@ -17,7 +17,7 @@ impl Column {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FetchMode {
     Incremental, // Read file until EOF, append line by line, as soon as new data arrives.
     Autorefresh(Duration), // Read file until EOF, replace all at once, replace whole data. Repeat.

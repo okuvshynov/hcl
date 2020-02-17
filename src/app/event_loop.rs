@@ -8,6 +8,7 @@ use termion::event::{Event, Key, MouseButton, MouseEvent};
 use termion::input::TermRead;
 
 use crate::app::settings::{FetchMode, Settings};
+use crate::app::window::WindowAdjust;
 use crate::data::fetcher::{FetcherError, FetcherLoop};
 use crate::data::series::{SeriesSet, Slice};
 use crate::data::state::State;
@@ -34,6 +35,54 @@ pub struct EventLoop {
 }
 
 impl EventLoop {
+    fn on_mouse_press(&mut self, b: MouseButton, x: i64, w: i64, h: i64) -> bool {
+        let mut xm = WindowAdjust::new(self.state.data.series_size(), w, &mut self.state.x);
+        let mut ym = WindowAdjust::new(self.state.data.series_count(), h, &mut self.state.y);
+        match b {
+            MouseButton::WheelDown => ym.move_offset(1),
+            MouseButton::WheelUp => ym.move_offset(-1),
+            MouseButton::Left => xm.set_cursor(x - 1),
+            _ => false,
+        }
+    }
+
+    fn on_key_press(&mut self, input: Key, w: i64, h: i64) -> bool {
+        let mut x = WindowAdjust::new(self.state.data.series_size(), w, &mut self.state.x);
+        let mut y = WindowAdjust::new(self.state.data.series_count(), h, &mut self.state.y);
+
+        match input {
+            // vertical navigation
+            Key::Down | Key::Char('j') => y.move_offset(1),
+            Key::Up | Key::Char('k') => y.move_offset(-1),
+            Key::Char('g') => y.begin(),
+            Key::Char('G') => y.end(),
+            Key::Ctrl('b') => y.pageup(),
+            Key::Ctrl('f') => y.pagedown(),
+            Key::Ctrl('u') => y.halfpageup(),
+            Key::Ctrl('d') => y.halfpagedown(),
+
+            // horizontal navigation
+            Key::Right | Key::Char('l') => x.move_cursor(1),
+            Key::Left | Key::Char('h') => x.move_cursor(-1),
+            Key::Ctrl('l') => x.move_offset(1),
+            Key::Ctrl('h') => x.move_offset(-1),
+
+            Key::Char('H') => x.cursor_begin(),
+            Key::Char('L') => x.cursor_end(),
+
+            Key::Char('$') => (x.end() || x.cursor_end()),
+            Key::Char('0') => (x.begin() || x.cursor_begin()),
+
+            Key::Char('c') => self.state.hide_cursor(),
+
+            Key::Char('p') => {
+                // TODO: in theory, this can race. We shall update UI after fetcher 'acknowledged' pause
+                self.fetcher_loop.pause();
+                self.state.pause()
+            }
+            _ => false,
+        }
+    }
     // Entry point to main event loop.
     pub fn start(settings: Settings) -> Result<(), Error> {
         let mut terminal = ui::ui_init::init()?;
@@ -105,12 +154,7 @@ impl EventLoop {
                 }
                 Message::Tick => event_loop.fetcher_loop.fetch(),
                 Message::MousePress((b, x)) => {
-                    if event_loop.state.on_mouse_press(
-                        b,
-                        x as i64,
-                        surface.width()?,
-                        surface.height()?,
-                    ) {
+                    if event_loop.on_mouse_press(b, x as i64, surface.width()?, surface.height()?) {
                         surface.render(&event_loop.state, &settings)?;
                     }
                 }
@@ -118,10 +162,7 @@ impl EventLoop {
                     if input == Key::Char('q') || input == Key::Esc || input == Key::Ctrl('c') {
                         break;
                     }
-                    if event_loop
-                        .state
-                        .on_key_press(input, surface.width()?, surface.height()?)
-                    {
+                    if event_loop.on_key_press(input, surface.width()?, surface.height()?) {
                         surface.render(&event_loop.state, &settings)?;
                     }
                 }

@@ -213,7 +213,7 @@ Every second, hcl will call the aggregation script. Here we can see some of the 
 [dtrace](http://dtrace.org/blogs/about/) could work together with hcl and display dynamic tracing information in realtime. The following example is from running dtrace on MacOS 
 
 ```
-sudo ./scripts/dtrace/bitesize1s.d | hcl -x time -s 50
+sudo ./scripts/dtrace/io_size.d | hcl -x time -s 50
 ```
 
 This traces all disk IO events and shows how the distribution of the size of the IO operation is changing over time.
