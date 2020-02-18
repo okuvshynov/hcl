@@ -20,6 +20,7 @@ pub struct FetcherLoop {
 pub struct FetcherSettings {
     pub cmd: Option<String>,
     pub x: Column,
+    pub paired: bool,
 }
 
 impl FetcherLoop {
@@ -32,6 +33,7 @@ impl FetcherLoop {
         let fetcher_settings = FetcherSettings {
             cmd: settings.cmd.as_ref().map(|v| v.join(" ")),
             x: settings.x.clone(),
+            paired: settings.paired,
         };
         fetcher.fetcher_loop(fetcher_settings, from_main_loop, to_main_loop.clone());
         FetcherLoop {

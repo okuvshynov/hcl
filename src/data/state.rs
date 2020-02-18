@@ -60,7 +60,6 @@ impl State {
         }
     }
 
-    // In this case, set is empty, but has new columns
     pub fn extend_dataset(&mut self, d: SeriesSet, width: i64) {
         self.error_message = None;
         self.data.append_set(d);

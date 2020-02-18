@@ -31,6 +31,20 @@ impl Schema {
         }
     }
 
+    pub fn from_title_range(x: Column, titles: &[String]) -> Schema {
+        let mut res = Schema::default();
+
+        titles.iter().zip(0..).for_each(|(t, i)| {
+            if x.matches(t, i) {
+                res.x = Some(ColumnSchema::new(t.to_owned(), i));
+            } else {
+                res.titles.push(t.to_owned());
+            }
+        });
+
+        res
+    }
+
     pub fn from_titles(x: Column, titles: &str) -> Schema {
         let mut res = Schema::default();
 
@@ -68,6 +82,15 @@ impl Schema {
                 Some(x) if x.index == i => res.x = Some(v.to_owned()),
                 _ => res.y.push(v.trim().parse::<f64>().unwrap_or(std::f64::NAN)),
             });
+        res
+    }
+
+    pub fn slice_from_range(&self, slice: &[String]) -> Slice {
+        let mut res = Slice::default();
+        slice.iter().enumerate().for_each(|(i, v)| match &self.x {
+            Some(x) if x.index == i => res.x = Some(v.to_owned()),
+            _ => res.y.push(v.trim().parse::<f64>().unwrap_or(std::f64::NAN)),
+        });
         res
     }
 }
