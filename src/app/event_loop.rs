@@ -3,17 +3,27 @@ use std::thread;
 use std::time::Duration;
 
 use failure::Error;
-use termion::async_stdin;
-use termion::event::{Event, Key, MouseButton, MouseEvent};
-use termion::input::TermRead;
+use termion::{
+    async_stdin,
+    event::{Event, Key, MouseButton, MouseEvent},
+    input::TermRead,
+};
 
-use crate::app::settings::{FetchMode, Settings};
-use crate::app::window::WindowAdjust;
-use crate::data::fetcher::{FetcherError, FetcherLoop};
-use crate::data::series::{SeriesSet, Slice};
-use crate::data::state::State;
-use crate::ui;
-use crate::ui::surface::{Surface, TermSurface};
+use crate::{
+    app::{
+        settings::{FetchMode, Settings},
+        window::WindowAdjust,
+    },
+    data::{
+        fetcher::{FetcherError, FetcherLoop},
+        series::{SeriesSet, Slice},
+        state::State,
+    },
+    ui::{
+        surface::{Surface, TermSurface},
+        ui_init,
+    },
+};
 
 // Unit of information we pass through the main queue
 pub enum Message {
@@ -76,7 +86,7 @@ impl EventLoop {
             Key::Char('c') => self.state.hide_cursor(),
 
             Key::Char('p') => {
-                // TODO: in theory, this can race. We shall update UI after fetcher 'acknowledged' pause
+                // TODO: this can race. We shall update UI after fetcher 'acknowledged' pause
                 self.fetcher_loop.pause();
                 self.state.pause()
             }
@@ -85,7 +95,7 @@ impl EventLoop {
     }
     // Entry point to main event loop.
     pub fn start(settings: Settings) -> Result<(), Error> {
-        let mut terminal = ui::ui_init::init()?;
+        let mut terminal = ui_init::init()?;
         // surface is an entity which is aware of layout, thus,
         // surface can provide information on the screen capacity.
         let mut surface = TermSurface::new(&mut terminal);

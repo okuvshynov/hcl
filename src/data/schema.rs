@@ -22,21 +22,19 @@ pub struct Schema {
 }
 
 impl Schema {
+    // parse string here?
+
     fn default() -> Schema {
         Schema {
             x: None,
             titles: vec![],
         }
     }
-    /// Creates new schema instance, using x/epoch configuration and
-    /// titles from the input.
-    pub fn new<'a, I>(x: Column, titles: I) -> Schema
-    where
-        I: Iterator<Item = &'a str>,
-    {
+
+    pub fn from_titles(x: Column, titles: &str) -> Schema {
         let mut res = Schema::default();
 
-        titles.zip(0..).for_each(|(t, i)| {
+        titles.split(',').zip(0..).for_each(|(t, i)| {
             if x.matches(t, i) {
                 res.x = Some(ColumnSchema::new(t.to_owned(), i));
             } else {
@@ -61,15 +59,15 @@ impl Schema {
 
     /// Formats a row of input data as a slice.
     /// Slice can be appended to a SeriesSet.
-    pub fn slice<'a, I>(&self, input: I) -> Slice
-    where
-        I: Iterator<Item = &'a str>,
-    {
+    pub fn slice(&self, slice: &str) -> Slice {
         let mut res = Slice::default();
-        input.enumerate().for_each(|(i, v)| match &self.x {
-            Some(x) if x.index == i => res.x = Some(v.to_owned()),
-            _ => res.y.push(v.trim().parse::<f64>().unwrap_or(std::f64::NAN)),
-        });
+        slice
+            .split(',')
+            .enumerate()
+            .for_each(|(i, v)| match &self.x {
+                Some(x) if x.index == i => res.x = Some(v.to_owned()),
+                _ => res.y.push(v.trim().parse::<f64>().unwrap_or(std::f64::NAN)),
+            });
         res
     }
 }
@@ -79,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_schema() {
-        let schema = Schema::new(Column::None, vec!["a", "b", "c"].iter().map(|s| *s));
+        let schema = Schema::from_titles(Column::None, "a,b,c");
         let s = schema.empty_set();
         assert_eq!(s.x, None);
         assert_eq!(s.y.len(), 3);
@@ -87,20 +85,20 @@ mod tests {
         assert_eq!(s.y[1].title, "b");
         assert_eq!(s.y[2].title, "c");
 
-        let slice = schema.slice(vec!["1", "2", "3"].iter().map(|s| *s));
+        let slice = schema.slice("1,2,3");
         assert_eq!(slice.x, None);
         assert_eq!(slice.y, vec![1.0, 2.0, 3.0]);
     }
 
     #[test]
     fn test_x() {
-        let schema = Schema::new(Column::Index(0), vec!["a", "b", "c"].iter().map(|s| *s));
+        let schema = Schema::from_titles(Column::Index(0), "a,b,c");
         let s = schema.empty_set();
         assert_eq!(s.x, Some(("a".to_owned(), vec![])));
         assert_eq!(s.y.len(), 2);
         assert_eq!(s.y[0].title, "b");
 
-        let slice = schema.slice(vec!["1", "2", "3"].iter().map(|s| *s));
+        let slice = schema.slice("1,2,3");
         assert_eq!(slice.x, Some("1".to_owned()));
         assert_eq!(slice.y, vec![2.0, 3.0]);
     }

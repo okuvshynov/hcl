@@ -4,8 +4,7 @@ use crate::data::schema::Schema;
 use crate::data::series::SeriesSet;
 use crate::platform::exec::spawned_stdout;
 
-use std::io::BufRead;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::sync::mpsc;
 
 // waits for 'fetch' event to re-read the data;
@@ -18,18 +17,24 @@ impl OnDemandFetcher {
         OnDemandFetcher {}
     }
     fn read(settings: &FetcherSettings) -> Result<SeriesSet, FetcherError> {
-        let mut lines = BufReader::new(spawned_stdout(&settings.cmd.as_ref().unwrap())?).lines();
-        if let Some(l) = lines.next() {
-            let schema = Schema::new(settings.x.clone(), l?.split(','));
-            let mut data = schema.empty_set();
+        if let Some(cmd) = &settings.cmd.as_ref() {
+            let mut lines = BufReader::new(spawned_stdout(cmd)?).lines();
+            if let Some(l) = lines.next() {
+                let schema = Schema::from_titles(settings.x.clone(), &l?);
+                let mut data = schema.empty_set();
 
-            for l in lines {
-                data.append_slice(schema.slice(l?.split(',')));
+                for l in lines {
+                    data.append_slice(schema.slice(&l?));
+                }
+                return Ok(data);
             }
-            return Ok(data);
+            // return empty data vs no data?
+            return Ok(SeriesSet::default());
         }
-        // return empty data vs no data?
-        return Ok(SeriesSet::default());
+        return Err(FetcherError::IO(Error::new(
+            ErrorKind::NotFound,
+            "command not found",
+        )));
     }
 }
 

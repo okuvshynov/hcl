@@ -1,5 +1,5 @@
 use crate::app::event_loop::Message;
-use crate::app::settings::{Column, FetchMode};
+use crate::app::settings::Column;
 use crate::data::fetcher::{Fetcher, FetcherError, FetcherEvent, FetcherSettings};
 use crate::data::schema::Schema;
 use crate::data::series::{SeriesSet, Slice};
@@ -15,29 +15,26 @@ use std::sync::mpsc;
 pub enum ReaderMessage {
     Extend(SeriesSet),
     Append(Slice),
-    Replace(SeriesSet),
     EOF,
 }
 
 pub struct Reader<R: Read> {
     lines: Lines<BufReader<R>>,
-    mode: FetchMode,
     schema: Option<Schema>,
     x: Column,
 }
 
 impl<R: Read> Reader<R> {
-    pub fn new(reader: R, mode: FetchMode, x: Column) -> Self {
+    pub fn new(reader: R, x: Column) -> Self {
         let br = BufReader::new(reader);
         Reader::<R> {
             lines: br.lines(),
-            mode,
             schema: None,
             x,
         }
     }
 
-    fn next_incremental(&mut self) -> Result<ReaderMessage, FetcherError> {
+    pub fn next(&mut self) -> Result<ReaderMessage, FetcherError> {
         loop {
             match self.lines.next() {
                 Some(Ok(l)) => {
@@ -45,43 +42,18 @@ impl<R: Read> Reader<R> {
                         self.schema = None;
                         continue;
                     }
-                    if self.schema.is_none() {
-                        self.schema = Some(Schema::new(self.x.clone(), l.split(',')));
-                        return Ok(ReaderMessage::Extend(
-                            self.schema.as_ref().unwrap().empty_set(),
-                        ));
-                    } else {
-                        return Ok(ReaderMessage::Append(
-                            self.schema.as_ref().unwrap().slice(l.split(',')),
-                        ));
+                    match self.schema.as_ref() {
+                        None => {
+                            self.schema = Some(Schema::from_titles(self.x.clone(), &l));
+                            return Ok(ReaderMessage::Extend(
+                                self.schema.as_ref().unwrap().empty_set(),
+                            ));
+                        }
+                        Some(schema) => return Ok(ReaderMessage::Append(schema.slice(&l))),
                     }
                 }
                 _ => return Ok(ReaderMessage::EOF),
             }
-        }
-    }
-
-    fn next_full(&mut self) -> Result<ReaderMessage, FetcherError> {
-        if let Some(l) = self.lines.next() {
-            let schema = Schema::new(self.x.clone(), l?.split(','));
-            let mut data = schema.empty_set();
-
-            loop {
-                match self.lines.next() {
-                    Some(l) => data.append_slice(schema.slice(l?.split(','))),
-                    None => break,
-                }
-            }
-            Ok(ReaderMessage::Replace(data))
-        } else {
-            Ok(ReaderMessage::EOF)
-        }
-    }
-
-    pub fn next(&mut self) -> Result<ReaderMessage, FetcherError> {
-        match self.mode {
-            FetchMode::Incremental => self.next_incremental(),
-            FetchMode::Autorefresh(_) => self.next_full(),
         }
     }
 }
@@ -98,7 +70,7 @@ impl ContinuousFetcher {
         from_main_loop: mpsc::Receiver<FetcherEvent>,
         to_main_loop: &mpsc::Sender<Message>,
     ) -> Result<(), FetcherError> {
-        let mut r = Reader::new(reader, FetchMode::Incremental, settings.x.clone());
+        let mut r = Reader::new(reader, settings.x.clone());
         loop {
             ContinuousFetcher::check_pause(&from_main_loop);
             match r.next()? {
@@ -109,7 +81,6 @@ impl ContinuousFetcher {
                 ReaderMessage::Extend(set) => {
                     to_main_loop.send(Message::ExtendDataSet(set)).unwrap()
                 }
-                ReaderMessage::Replace(set) => to_main_loop.send(Message::Data(set)).unwrap(),
             }
         }
     }
@@ -124,6 +95,24 @@ impl ContinuousFetcher {
             }
         }
     }
+
+    fn read(
+        settings: FetcherSettings,
+        from_main_loop: mpsc::Receiver<FetcherEvent>,
+        to_main_loop: &mpsc::Sender<Message>,
+    ) -> Result<(), FetcherError> {
+        if let Some(cmd) = settings.cmd.as_ref() {
+            ContinuousFetcher::read_from(
+                &settings,
+                spawned_stdout(&cmd)?,
+                from_main_loop,
+                &to_main_loop,
+            )
+        } else {
+            let stdin = stdin();
+            ContinuousFetcher::read_from(&settings, stdin.lock(), from_main_loop, &to_main_loop)
+        }
+    }
 }
 
 impl Fetcher for ContinuousFetcher {
@@ -134,18 +123,7 @@ impl Fetcher for ContinuousFetcher {
         to_main_loop: mpsc::Sender<Message>,
     ) {
         std::thread::spawn(move || {
-            let res = if let Some(cmd) = settings.cmd.as_ref() {
-                ContinuousFetcher::read_from(
-                    &settings,
-                    spawned_stdout(&cmd).unwrap(),
-                    from_main_loop,
-                    &to_main_loop,
-                )
-            } else {
-                let stdin = stdin();
-                ContinuousFetcher::read_from(&settings, stdin.lock(), from_main_loop, &to_main_loop)
-            };
-            if let Err(e) = res {
+            if let Err(e) = ContinuousFetcher::read(settings, from_main_loop, &to_main_loop) {
                 to_main_loop.send(Message::FetchError(e)).unwrap();
             }
         });
