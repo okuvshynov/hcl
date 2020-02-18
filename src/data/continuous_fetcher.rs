@@ -12,29 +12,87 @@ use std::io::Lines;
 use std::io::Read;
 use std::sync::mpsc;
 
+trait Reader {
+    fn next(&mut self) -> Result<ReaderMessage, FetcherError>;
+}
+
 pub enum ReaderMessage {
     Extend(SeriesSet),
     Append(Slice),
     EOF,
 }
 
-pub struct Reader<R: Read> {
+// Right now reader and schema both maintain 'state' in reading FSM
+// This needs to be improved, as we start loading supporting other input
+// formats.
+// First, let's build a 'pair reader'. Format will be
+// title: value\ntitle: value\n, with empty line being a 'end of column' signal.
+
+pub struct PairReader<R: Read> {
+    lines: Lines<BufReader<R>>,
+    x: Column,
+}
+
+impl<R: Read> PairReader<R> {
+    pub fn new(reader: R, x: Column) -> Self {
+        let br = BufReader::new(reader);
+        PairReader::<R> {
+            lines: br.lines(),
+            x,
+        }
+    }
+}
+
+impl<R: Read> Reader for PairReader<R> {
+    fn next(&mut self) -> Result<ReaderMessage, FetcherError> {
+        let mut titles = vec![];
+        let mut values = vec![];
+        loop {
+            match self.lines.next() {
+                Some(Ok(l)) if l != "" => {
+                    let mut parts = l.split(':').take(2);
+                    match (parts.next(), parts.next()) {
+                        (Some(title), Some(value)) => {
+                            titles.push(title.to_owned());
+                            values.push(value.to_owned());
+                        }
+                        _ => {}
+                    };
+                }
+                _ => break,
+            }
+        }
+        if titles.len() > 0 {
+            let schema = Schema::from_title_range(self.x.clone(), &titles);
+            let mut data = schema.empty_set();
+            data.append_slice(schema.slice_from_range(&values));
+            return Ok(ReaderMessage::Extend(data));
+        } else {
+            // TODO: is that correct? What if we get empty dataset?
+            return Ok(ReaderMessage::EOF);
+        }
+    }
+}
+
+pub struct LineReader<R: Read> {
     lines: Lines<BufReader<R>>,
     schema: Option<Schema>,
     x: Column,
 }
 
-impl<R: Read> Reader<R> {
+impl<R: Read> LineReader<R> {
     pub fn new(reader: R, x: Column) -> Self {
         let br = BufReader::new(reader);
-        Reader::<R> {
+        LineReader::<R> {
             lines: br.lines(),
             schema: None,
             x,
         }
     }
+}
 
-    pub fn next(&mut self) -> Result<ReaderMessage, FetcherError> {
+impl<R: Read> Reader for LineReader<R> {
+    fn next(&mut self) -> Result<ReaderMessage, FetcherError> {
         loop {
             match self.lines.next() {
                 Some(Ok(l)) => {
@@ -64,16 +122,15 @@ impl ContinuousFetcher {
     pub fn new() -> ContinuousFetcher {
         ContinuousFetcher {}
     }
-    fn read_from(
-        settings: &FetcherSettings,
-        reader: impl Read,
+
+    fn loop_with_reader(
+        mut reader: impl Reader,
         from_main_loop: mpsc::Receiver<FetcherEvent>,
         to_main_loop: &mpsc::Sender<Message>,
     ) -> Result<(), FetcherError> {
-        let mut r = Reader::new(reader, settings.x.clone());
         loop {
             ContinuousFetcher::check_pause(&from_main_loop);
-            match r.next()? {
+            match reader.next()? {
                 ReaderMessage::EOF => return Ok(()),
                 ReaderMessage::Append(slice) => {
                     to_main_loop.send(Message::DataSlice(slice)).unwrap()
@@ -82,6 +139,27 @@ impl ContinuousFetcher {
                     to_main_loop.send(Message::ExtendDataSet(set)).unwrap()
                 }
             }
+        }
+    }
+
+    fn read_from(
+        settings: &FetcherSettings,
+        reader: impl Read,
+        from_main_loop: mpsc::Receiver<FetcherEvent>,
+        to_main_loop: &mpsc::Sender<Message>,
+    ) -> Result<(), FetcherError> {
+        if settings.paired {
+            Self::loop_with_reader(
+                PairReader::new(reader, settings.x.clone()),
+                from_main_loop,
+                to_main_loop,
+            )
+        } else {
+            Self::loop_with_reader(
+                LineReader::new(reader, settings.x.clone()),
+                from_main_loop,
+                to_main_loop,
+            )
         }
     }
 

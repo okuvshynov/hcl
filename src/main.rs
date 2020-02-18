@@ -19,6 +19,12 @@ fn main() -> Result<(), failure::Error> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("p")
+                .short("p")
+                // TODO: better help message
+                .help("use by pair format instead of csv"),
+        )
+        .arg(
             Arg::with_name("x")
                 .short("x")
                 .help("name of the field to use for X axis values.")
@@ -109,6 +115,7 @@ another single shared autoscale.
             (None, Some(index)) => Column::Index(index.parse::<usize>().unwrap()),
             _ => Column::None,
         },
+        paired: matches.is_present("p"),
     };
 
     app::event_loop::EventLoop::start(settings)

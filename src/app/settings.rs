@@ -28,6 +28,7 @@ pub struct Settings {
     pub refresh_rate: Duration,
     pub x: Column,
     pub scales: Option<String>,
+    pub paired: bool,
 }
 
 impl Settings {
