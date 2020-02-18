@@ -1,5 +1,7 @@
+pub mod continuous_fetcher;
 pub mod fetcher;
 pub mod metric_parse;
+pub mod on_demand_fetcher;
 pub mod scale;
 pub mod scale_config;
 pub mod schema;

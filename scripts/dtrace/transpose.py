@@ -13,6 +13,9 @@ try:
     for l in sys.stdin:
         l = l.strip()
         if len(l) == 0:
+            # inverse order?
+            k.reverse()
+            v.reverse();
             print(",".join(k))
             print(",".join(v))
             print("")

@@ -68,7 +68,7 @@ impl<'a> Widget for Charts<'a> {
                             .set_char(c.symbol);
 
                         // draw cursor
-                        if j == self.state.x.cursor as usize {
+                        if j == self.state.x.cursor as usize && self.state.cursor_allowed() {
                             render_cursor(
                                 area.left() + 1 + j as u16,
                                 y,
@@ -100,7 +100,7 @@ impl<'a> Widget for Charts<'a> {
                 );
             }
 
-            if xx.len() > self.state.x.cursor as usize {
+            if xx.len() > self.state.x.cursor as usize && self.state.cursor_allowed() {
                 render_cursor(
                     area.left() + 1 + self.state.x.cursor as u16,
                     area.bottom() - 1,
