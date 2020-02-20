@@ -68,8 +68,7 @@ impl<R: Read> Reader for PairReader<R> {
             data.append_slice(schema.slice_from_range(&values));
             return Ok(ReaderMessage::Extend(data));
         } else {
-            // TODO: is that correct? What if we get empty dataset?
-            return Ok(ReaderMessage::EOF);
+            return Ok(ReaderMessage::Extend(SeriesSet::default()));
         }
     }
 }

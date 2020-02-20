@@ -93,6 +93,7 @@ impl EventLoop {
             _ => false,
         }
     }
+
     // Entry point to main event loop.
     pub fn start(settings: Settings) -> Result<(), Error> {
         let mut terminal = ui_init::init()?;
@@ -112,7 +113,6 @@ impl EventLoop {
             fetcher_loop,
         };
 
-        // keyboard and mouse listener
         event_loop.add(move |sender: mpsc::Sender<Message>| -> Result<(), Error> {
             let mut events = async_stdin().events();
             loop {
@@ -144,31 +144,41 @@ impl EventLoop {
         // main event loop
         loop {
             match event_loop.receiver.recv()? {
+                // Append new column, with potentially new column names.
+                // series might be reordered as a result of this operation.
                 Message::ExtendDataSet(d) => {
                     event_loop.state.extend_dataset(d, surface.width()?);
                     surface.render(&event_loop.state, &settings)?;
                 }
+                // Append new slice to the existing set of columns.
                 Message::DataSlice(s) => {
                     event_loop.state.append_slice(s, surface.width()?);
                     surface.render(&event_loop.state, &settings)?;
                 }
+                // Replace whole data; used with periodic refresh mode.
                 Message::Data(d) => {
                     event_loop.state.replace_data(d, surface.width()?);
                     surface.render(&event_loop.state, &settings)?;
                 }
+                // Handle fetching error.
                 Message::FetchError(e) => {
                     // error will be cleared on next successful data fetch
                     event_loop.state.on_error(format!("{}", e));
                     // we need to render to show 'error' to user.
                     surface.render(&event_loop.state, &settings)?;
                 }
+                // periodic refresh.
                 Message::Tick => event_loop.fetcher_loop.fetch(),
+
+                // mouse event; includes both press/scroll.
                 Message::MousePress((b, x)) => {
                     if event_loop.on_mouse_press(b, x as i64, surface.width()?, surface.height()?) {
                         surface.render(&event_loop.state, &settings)?;
                     }
                 }
+                // key events; 'exit' handled right here, everything else - in dedicated handler.
                 Message::KeyPress(input) => {
+                    // TODO: handle signals (including ctrl+c) properly
                     if input == Key::Char('q') || input == Key::Esc || input == Key::Ctrl('c') {
                         break;
                     }
