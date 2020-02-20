@@ -57,7 +57,6 @@ impl SeriesSet {
             .for_each(|(y, v)| y.values.push(*v));
     }
 
-    // TODO: support non-empty other
     pub fn append_set(&mut self, mut other: SeriesSet) {
         let old_length = self.series_size();
         let new_length = other.series_size();
@@ -94,6 +93,11 @@ impl SeriesSet {
         if let (Some((_, xo)), Some((_, xn))) = (self.x.as_mut(), other.x.as_mut()) {
             xo.append(xn);
         }
+        self.order_by();
+    }
+
+    fn order_by(&mut self) {
+        self.y.sort_by_cached_key(|a| - (a.values.iter().filter(|v| !v.is_nan()).sum::<f64>() * 1.0e9) as i64);
     }
 }
 
@@ -150,4 +154,34 @@ mod tests {
         assert!(old.y[2].values[3].is_nan());
         assert!(old.y[2].values[4].is_nan());
     }
+        #[test]
+        fn append_set_to_empty() {
+            let mut old = SeriesSet {
+                x: None,
+                y: vec![
+                ],
+            };
+    
+            let new = SeriesSet {
+                x: None,
+                y: vec![
+                    Series {
+                        title: "a".to_owned(),
+                        values: vec![4.0, 5.0],
+                    },
+                    Series {
+                        title: "c".to_owned(),
+                        values: vec![6.0, 7.0],
+                    },
+                ],
+            };
+    
+            old.append_set(new);
+    
+            assert_eq!(old.y.len(), 2);
+            assert_eq!(old.y[1].title, "a".to_owned());
+            assert_eq!(old.y[0].title, "c".to_owned());
+            assert_eq!(old.y[1].values, vec![4.0, 5.0]);
+            assert_eq!(old.y[0].values, vec![6.0, 7.0]);
+      }
 }

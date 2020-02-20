@@ -1,7 +1,7 @@
 #!/usr/sbin/dtrace -s
 /* 
  * This script counts number of bytes read by executable,
- * prints it out every 5 seconds.
+ * prints it out every 1 second.
  */
 
 #pragma D option quiet
@@ -12,7 +12,7 @@ io:::start
 	@io[execname] = sum(args[0]->b_bcount);
 }
 
-profile:::tick-5sec
+profile:::tick-1sec
 {
   printa("%S:%@d\n", @io);
   printf("\n");

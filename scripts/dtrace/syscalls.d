@@ -11,7 +11,7 @@ syscall:::entry
   @io[probefunc] = count()
 }
 
-profile:::tick-5sec
+profile:::tick-1sec
 {
   printa("%S:%@d\n", @io);
   printf("\n");

@@ -177,7 +177,6 @@ mod tests {
         assert_approx_eq!(scales.pick("w").unwrap().run(-100.0), 0.25);
         assert_approx_eq!(scales.pick("w").unwrap().run(-300.0), -0.25);
     }
-
     #[test]
     fn materialized() {
         let s = vec![
@@ -208,5 +207,36 @@ mod tests {
         assert_approx_eq!(a, -100.0);
         assert_approx_eq!(b, 0.0);
         assert_approx_eq!(c, 100.0);
+    }
+
+    #[test]
+    fn global_auto() {
+        let s = vec![
+            Series {
+                title: "cpu1".to_owned(),
+                values: vec![0.0, 10.0, 11.0, 9.0],
+            },
+            Series {
+                title: "cpu2".to_owned(),
+                values: vec![0.0, 100.0, 11.0, 99.0],
+            },
+            Series {
+                title: "ram_free_mb".to_owned(),
+                values: vec![1111.0, 999.0, 888.0, 99.0],
+            },
+        ];
+        let scales = ScalesConfig::new("auto").unwrap();
+        let scales = scales.materialize(&s);
+
+        let cpu_scale = scales.pick("cpu1").unwrap();
+        let (a, b, c) = cpu_scale.to_tuple();
+        assert_approx_eq!(a, -1111.0);
+        assert_approx_eq!(b, 0.0);
+        assert_approx_eq!(c, 1111.0);
+        let cpu_scale = scales.pick("cpu2").unwrap();
+        let (a, b, c) = cpu_scale.to_tuple();
+        assert_approx_eq!(a, -1111.0);
+        assert_approx_eq!(b, 0.0);
+        assert_approx_eq!(c, 1111.0);
     }
 }

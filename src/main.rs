@@ -13,12 +13,6 @@ fn main() -> Result<(), failure::Error> {
         .setting(AppSettings::TrailingVarArg)
         .author("Oleksandr K. <okuvshynov@gmail.com>")
         .arg(
-            Arg::with_name("t")
-                .short("t")
-                .help("name of the field to use for epoch tracking.")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("p")
                 .short("p")
                 // TODO: better help message
