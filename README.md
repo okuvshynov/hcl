@@ -221,6 +221,23 @@ Series names (1k, 2k, ...) mean 'IO of this size in bytes', and each value in th
 
 ![dtrace demo](https://github.com/okuvshynov/hcl/raw/master/static/dtrace.png "dtrace demo")
 
+#### one-liners
+
+syscalls count by syscall
+```
+dtrace -q -n 'syscall:::entry { @n[probefunc] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+```
+
+io count by executable name
+```
+dtrace -q -n 'io:::start { @n[execname] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+```
+
+io size by executable name
+```
+dtrace -q -n 'io:::start { @n[execname] = sum(args[0]->b_bcount); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+```
+
 ### perf
 For CPU counters, [linux perf](https://perf.wiki.kernel.org/index.php/Main_Page) can be used to print out PMU events.
 
