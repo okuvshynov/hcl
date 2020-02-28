@@ -96,6 +96,7 @@ impl SeriesSet {
         self.order_by();
     }
 
+    // TODO: non-desc ordering
     fn order_by(&mut self) {
         self.y.sort_by_cached_key(|a| - (a.values.iter().filter(|v| !v.is_nan()).sum::<f64>() * 1.0e9) as i64);
     }

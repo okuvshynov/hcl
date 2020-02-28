@@ -49,7 +49,7 @@ impl<R: Read> Reader for PairReader<R> {
         let mut values = vec![];
         loop {
             match self.lines.next() {
-                Some(Ok(l)) if l != "" => {
+                Some(Ok(l)) => if l != "" {
                     let mut parts = l.split(':').take(2);
                     match (parts.next(), parts.next()) {
                         (Some(title), Some(value)) => {
@@ -58,18 +58,30 @@ impl<R: Read> Reader for PairReader<R> {
                         }
                         _ => {}
                     };
+                } else {
+                    // empty line, flush
+                    if titles.len() > 0 {
+                        let schema = Schema::from_title_range(self.x.clone(), &titles);
+                        let mut data = schema.empty_set();
+                        data.append_slice(schema.slice_from_range(&values));
+                        return Ok(ReaderMessage::Extend(data));
+                    } else {
+                        return Ok(ReaderMessage::Extend(SeriesSet::default()));
+                    }
+                },
+                _ => {
+                    if titles.len() > 0 {
+                        let schema = Schema::from_title_range(self.x.clone(), &titles);
+                        let mut data = schema.empty_set();
+                        data.append_slice(schema.slice_from_range(&values));
+                        return Ok(ReaderMessage::Extend(data));
+                    } else {
+                        return Ok(ReaderMessage::EOF);
+                    }
                 }
-                _ => break,
             }
         }
-        if titles.len() > 0 {
-            let schema = Schema::from_title_range(self.x.clone(), &titles);
-            let mut data = schema.empty_set();
-            data.append_slice(schema.slice_from_range(&values));
-            return Ok(ReaderMessage::Extend(data));
-        } else {
-            return Ok(ReaderMessage::Extend(SeriesSet::default()));
-        }
+        
     }
 }
 

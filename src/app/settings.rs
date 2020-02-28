@@ -17,26 +17,10 @@ impl Column {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum FetchMode {
-    Incremental, // Read file until EOF, append line by line, as soon as new data arrives.
-    Autorefresh(Duration), // Read file until EOF, replace all at once, replace whole data. Repeat.
-}
-
 pub struct Settings {
     pub cmd: Option<Vec<String>>,
     pub refresh_rate: Duration,
     pub x: Column,
     pub scales: Option<String>,
     pub paired: bool,
-}
-
-impl Settings {
-    pub fn fetch_mode(&self) -> FetchMode {
-        if self.refresh_rate.as_nanos() > 0 {
-            FetchMode::Autorefresh(self.refresh_rate)
-        } else {
-            FetchMode::Incremental
-        }
-    }
 }

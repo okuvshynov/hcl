@@ -206,7 +206,9 @@ Every second, hcl will call the aggregation script. Here we can see some of the 
 * -s -- defines a scale for the series. If series title matches the filter ('cpu') the values will be scaled as if the domain for the values is [0; 100];
 * ./scripts/atop/atop.sh -- represents a script to run to generate the data.
 
-![atop demo](https://github.com/okuvshynov/hcl/raw/master/static/atop.gif "atop demo")
+```
+$  atopsar -c -S -b 21:25 | awk '$1 ~ /[0-9][0-9]:[0-9][0-9]/ && $2 != "cpu" { if ($2 == "all") { print ""} else {print "cpu"$2":"$3+$5}}' | hcl
+```
 
 ### dtrace
 

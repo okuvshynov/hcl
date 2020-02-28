@@ -1,4 +1,3 @@
-use crate::app::settings::{FetchMode, Settings};
 use crate::data::state::State;
 use crate::ui::style::{default, EmptyBox};
 
@@ -9,39 +8,31 @@ use tui::widgets::Widget;
 
 /// Status bar is showing information like mode/visible subset of data
 /// And cuurrent 'epoch'.
-pub struct StatusBar<'a, 'b> {
+pub struct StatusBar<'a> {
     state: &'a State,
-    settings: &'b Settings,
     series_displayed: (usize, usize),
 }
 
-impl<'a, 'b> StatusBar<'a, 'b> {
+impl<'a> StatusBar<'a> {
     pub fn new(
         state: &'a State,
-        settings: &'b Settings,
         series_displayed: (usize, usize),
-    ) -> StatusBar<'a, 'b> {
+    ) -> StatusBar<'a> {
         StatusBar {
             state,
-            settings,
             series_displayed,
         }
     }
 }
 
-impl<'a, 'b> Widget for StatusBar<'a, 'b> {
+impl<'a> Widget for StatusBar<'a> {
     fn draw(&mut self, area: Rect, buf: &mut Buffer) {
         EmptyBox::fill(area, buf);
 
-        let mode = match self.settings.fetch_mode() {
-            FetchMode::Autorefresh(dur) => format!("refresh every {}ms", dur.as_millis()),
-            FetchMode::Incremental => format!("incremental"),
-        };
-
         let message = match (self.state.error_message.as_ref(), self.state.is_auto()) {
             (Some(err), _) => format!("error: {}", err),
-            (None, false) => format!("{}, paused", mode),
-            (None, true) => mode,
+            (None, false) => format!("paused"),
+            (None, true) => format!("reading"),
         };
 
         buf.set_string(
