@@ -69,7 +69,7 @@ impl State {
             xm.end();
         }
     }
-    
+
     pub fn on_error(&mut self, e: String) {
         self.error_message = Some(e);
     }

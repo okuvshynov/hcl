@@ -10,10 +10,7 @@ use termion::{
 };
 
 use crate::{
-    app::{
-        settings::Settings,
-        window::WindowAdjust,
-    },
+    app::{settings::Settings, window::WindowAdjust},
     data::{
         fetcher::{FetcherError, FetcherLoop},
         series::{SeriesSet, Slice},

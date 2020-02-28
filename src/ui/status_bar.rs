@@ -14,10 +14,7 @@ pub struct StatusBar<'a> {
 }
 
 impl<'a> StatusBar<'a> {
-    pub fn new(
-        state: &'a State,
-        series_displayed: (usize, usize),
-    ) -> StatusBar<'a> {
+    pub fn new(state: &'a State, series_displayed: (usize, usize)) -> StatusBar<'a> {
         StatusBar {
             state,
             series_displayed,
