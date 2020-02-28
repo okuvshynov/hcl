@@ -201,6 +201,11 @@ $ vmstat -n 1 | awk -W interactive -v OFS=',' '{if (NR>1) { $1=$1; print; }}' | 
 $ atopsar -c -S -b 21:25 | awk '$1 ~ /[0-9][0-9]:[0-9][0-9]/ && $2 != "cpu" { if ($2 == "all") { print ""} else {print "cpu"$2":"$3+$5}}' | hcl -p -s cpu:100
 ```
 
+top 3 processes by RAM
+```
+$ atopsar -G -S -b 21:35 | awk '! /_top3_/ && $1 ~ /[0-9][0-9]:[0-9][0-9]/ { print "t," $3 "-" $2 "," $7 "-" $6 "," $11 "-" $10 "\n" $1","$4+0","$8+0","$12+0"\n"}' | hcl -x t
+```
+
 ### dtrace
 
 [dtrace](http://dtrace.org/blogs/about/) could work together with hcl and display dynamic tracing information in realtime. The following example is from running dtrace on MacOS 
