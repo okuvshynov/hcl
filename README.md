@@ -195,13 +195,14 @@ $ vmstat -n 1 | awk -W interactive -v OFS=',' '{if (NR>1) { $1=$1; print; }}' | 
 
 ### atop
 
-[atop](https://linux.die.net/man/1/atop) can be very useful to look into historical data on a single host. In this example [atopsar](https://linux.die.net/man/1/atopsar) reads log files produced by atop and hcl shows CPU/disk/network utilization over the last 15 minute.
+[atop](https://linux.die.net/man/1/atop) can be very useful to look into historical data on a single host.
 
+cpu usage per core:
 ```
 $ atopsar -c -S -b 21:25 | awk '$1 ~ /[0-9][0-9]:[0-9][0-9]/ && $2 != "cpu" { if ($2 == "all") { print ""} else {print "cpu"$2":"$3+$5}}' | hcl -p -s cpu:100
 ```
 
-top 3 processes by RAM
+top 3 processes by RAM:
 ```
 $ atopsar -G -S -b 21:35 | awk '! /_top3_/ && $1 ~ /[0-9][0-9]:[0-9][0-9]/ { print "t," $3 "-" $2 "," $7 "-" $6 "," $11 "-" $10 "\n" $1","$4+0","$8+0","$12+0"\n"}' | hcl -x t
 ```
