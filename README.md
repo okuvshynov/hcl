@@ -236,10 +236,15 @@ io size by executable name
 dtrace -q -n 'io:::start { @n[execname] = sum(args[0]->b_bcount); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
 ```
 
-### perf
-For CPU counters, [linux perf](https://perf.wiki.kernel.org/index.php/Main_Page) can be used to print out PMU events.
+### bpftrace one-liners
 
-#### one-liners:
+Visualize page faults by process, update every second:
+```
+bpftrace -e 'software:faults:1 { @[comm] = count(); } interval:s:1 { print(@); clear(@)}' | target/release/hcl -p -s auto
+```
+
+### perf one-liners
+For CPU counters, [linux perf](https://perf.wiki.kernel.org/index.php/Main_Page) can be used to print out PMU events.
 
 Show IPC by CPU:
 
