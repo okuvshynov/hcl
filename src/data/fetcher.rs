@@ -1,7 +1,6 @@
 use crate::app::event_loop::Message;
-use crate::app::settings::{Column, FetchMode, Settings};
+use crate::app::settings::{Column, Settings};
 use crate::data::continuous_fetcher::ContinuousFetcher;
-use crate::data::on_demand_fetcher::OnDemandFetcher;
 
 use std::sync::mpsc;
 
@@ -29,7 +28,7 @@ impl FetcherLoop {
         settings: &Settings,
     ) -> FetcherLoop {
         let (to_fetcher, from_main_loop) = mpsc::channel();
-        let fetcher = fetcher_factory(settings);
+        let fetcher = ContinuousFetcher::new();
         let fetcher_settings = FetcherSettings {
             cmd: settings.cmd.as_ref().map(|v| v.join(" ")),
             x: settings.x.clone(),
@@ -41,11 +40,15 @@ impl FetcherLoop {
         }
     }
     pub fn fetch(&mut self) {
-        self.sender_to_fetcher.send(FetcherEvent::Tick).unwrap();
+        if let Err(_) = self.sender_to_fetcher.send(FetcherEvent::Tick) {
+            // TODO: fetching done. Update status to done
+        }
     }
 
     pub fn pause(&mut self) {
-        self.sender_to_fetcher.send(FetcherEvent::Pause).unwrap();
+        if let Err(_) = self.sender_to_fetcher.send(FetcherEvent::Pause) {
+            // TODO: fetching done. Update status to done
+        }
     }
 }
 
@@ -56,14 +59,6 @@ pub trait Fetcher {
         from_main_loop: mpsc::Receiver<FetcherEvent>,
         to_main_loop: mpsc::Sender<Message>,
     );
-}
-
-fn fetcher_factory(settings: &Settings) -> Box<dyn Fetcher> {
-    if settings.fetch_mode() == FetchMode::Incremental {
-        return Box::new(ContinuousFetcher::new());
-    } else {
-        return Box::new(OnDemandFetcher::new());
-    }
 }
 
 #[derive(Debug)]

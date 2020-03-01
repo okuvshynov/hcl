@@ -70,16 +70,6 @@ impl State {
         }
     }
 
-    pub fn replace_data(&mut self, d: SeriesSet, width: i64) {
-        self.error_message = None;
-        self.data = d;
-        let mut xm = WindowAdjust::new(self.data.series_size(), width, &mut self.x);
-        xm.on_data();
-        if self.auto {
-            xm.end();
-        }
-    }
-
     pub fn on_error(&mut self, e: String) {
         self.error_message = Some(e);
     }

@@ -96,8 +96,11 @@ impl SeriesSet {
         self.order_by();
     }
 
+    // TODO: non-desc ordering
     fn order_by(&mut self) {
-        self.y.sort_by_cached_key(|a| - (a.values.iter().filter(|v| !v.is_nan()).sum::<f64>() * 1.0e9) as i64);
+        self.y.sort_by_cached_key(|a| {
+            -(a.values.iter().filter(|v| !v.is_nan()).sum::<f64>() * 1.0e9) as i64
+        });
     }
 }
 
@@ -154,34 +157,30 @@ mod tests {
         assert!(old.y[2].values[3].is_nan());
         assert!(old.y[2].values[4].is_nan());
     }
-        #[test]
-        fn append_set_to_empty() {
-            let mut old = SeriesSet {
-                x: None,
-                y: vec![
-                ],
-            };
-    
-            let new = SeriesSet {
-                x: None,
-                y: vec![
-                    Series {
-                        title: "a".to_owned(),
-                        values: vec![4.0, 5.0],
-                    },
-                    Series {
-                        title: "c".to_owned(),
-                        values: vec![6.0, 7.0],
-                    },
-                ],
-            };
-    
-            old.append_set(new);
-    
-            assert_eq!(old.y.len(), 2);
-            assert_eq!(old.y[1].title, "a".to_owned());
-            assert_eq!(old.y[0].title, "c".to_owned());
-            assert_eq!(old.y[1].values, vec![4.0, 5.0]);
-            assert_eq!(old.y[0].values, vec![6.0, 7.0]);
-      }
+    #[test]
+    fn append_set_to_empty() {
+        let mut old = SeriesSet { x: None, y: vec![] };
+
+        let new = SeriesSet {
+            x: None,
+            y: vec![
+                Series {
+                    title: "a".to_owned(),
+                    values: vec![4.0, 5.0],
+                },
+                Series {
+                    title: "c".to_owned(),
+                    values: vec![6.0, 7.0],
+                },
+            ],
+        };
+
+        old.append_set(new);
+
+        assert_eq!(old.y.len(), 2);
+        assert_eq!(old.y[1].title, "a".to_owned());
+        assert_eq!(old.y[0].title, "c".to_owned());
+        assert_eq!(old.y[1].values, vec![4.0, 5.0]);
+        assert_eq!(old.y[0].values, vec![6.0, 7.0]);
+    }
 }

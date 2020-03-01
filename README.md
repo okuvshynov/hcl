@@ -172,13 +172,14 @@ Mouse:
 
 Other:
 * p -- pause/resume auto-scroll to new data. Pausing can be useful when inspecting older data, to avoid refresh.
+* c -- show/hide cursor
 
 ## Examples
 
 ### static CSV file
 
 ```
-cat scripts/sine.csv | hcl 
+cat tests/sine.csv | hcl 
 ```
 
 ![static demo](https://github.com/okuvshynov/hcl/raw/master/static/sine.png "static demo")
@@ -194,79 +195,62 @@ $ vmstat -n 1 | awk -W interactive -v OFS=',' '{if (NR>1) { $1=$1; print; }}' | 
 
 ### atop
 
-[atop](https://linux.die.net/man/1/atop) can be very useful to look into historical data on a single host. In this example [atopsar](https://linux.die.net/man/1/atopsar) reads log files produced by atop and hcl shows CPU/disk/network utilization over the last 15 minute. Full refresh mode is used.
+[atop](https://linux.die.net/man/1/atop) can be very useful to look into historical data on a single host.
 
+cpu usage per core:
 ```
-$ hcl -r 1000 -x time -s 'cpu:100,network:500' ./scripts/atop/atop.sh
-```
-
-Every second, hcl will call the aggregation script. Here we can see some of the configuration options in action:
-* -r 1000 tells 'how often to query for new data', in this case, 1000 ms = 1s;
-* -x time -- the name of the column to use for 'x' axis. Usually, that will be some form of time/date;
-* -s -- defines a scale for the series. If series title matches the filter ('cpu') the values will be scaled as if the domain for the values is [0; 100];
-* ./scripts/atop/atop.sh -- represents a script to run to generate the data.
-
-![atop demo](https://github.com/okuvshynov/hcl/raw/master/static/atop.gif "atop demo")
-
-### dtrace
-
-[dtrace](http://dtrace.org/blogs/about/) could work together with hcl and display dynamic tracing information in realtime. The following example is from running dtrace on MacOS 
-
-```
-sudo ./scripts/dtrace/io_size.d | hcl -x time -s 50
+$ atopsar -c -S -b 21:25 | awk '$1 ~ /[0-9][0-9]:[0-9][0-9]/ && $2 != "cpu" { if ($2 == "all") { print ""} else {print "cpu"$2":"$3+$5}}' | hcl -p -s cpu:100
 ```
 
-This traces all disk IO events and shows how the distribution of the size of the IO operation is changing over time.
-Series names (1k, 2k, ...) mean 'IO of this size in bytes', and each value in the chart represent 'how many IO operations of this size happened during that second'. Custom script is created to report the distribution in CSV format, rather than default dtrace aggregation representation.
+top 3 processes by RAM:
+```
+$ atopsar -G -S -b 21:35 | awk '! /_top3_/ && $1 ~ /[0-9][0-9]:[0-9][0-9]/ { print "t," $3 "-" $2 "," $7 "-" $6 "," $11 "-" $10 "\n" $1","$4+0","$8+0","$12+0"\n"}' | hcl -x t
+```
 
-![dtrace demo](https://github.com/okuvshynov/hcl/raw/master/static/dtrace.png "dtrace demo")
+cpu by executable name:
+```
+atop -PPRC -r -b 11:00 | awk '{if ($8 != "") { if ($11+$12>0)print $8":"$11+$12; } else {print "";}}' | hcl -p -s auto
+```
 
-#### one-liners
+### dtrace oneliners
+
+hcl can work with [dtrace](http://dtrace.org/blogs/about/) and display dynamic tracing information in realtime. The following example is from running dtrace on MacOS 
 
 syscalls count by syscall
 ```
-dtrace -q -n 'syscall:::entry { @n[probefunc] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+$ dtrace -q -n 'syscall:::entry { @n[probefunc] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
 ```
 
 io count by executable name
 ```
-dtrace -q -n 'io:::start { @n[execname] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+$ dtrace -q -n 'io:::start { @n[execname] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
 ```
 
 io size by executable name
 ```
-dtrace -q -n 'io:::start { @n[execname] = sum(args[0]->b_bcount); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+$ dtrace -q -n 'io:::start { @n[execname] = sum(args[0]->b_bcount); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
 ```
 
-### perf
+io size distribution
+```
+$ dtrace -q -n 'io:::start { @ = quantize(args[0]->b_bcount); } profile:::tick-1sec { printa("%@d", @); clear(@)} profile:::tick-10s {exit(0);}' | awk '{if (NF==3) print (0+$1)":"(0+$3); if ($0=="") print "";}' | hcl -s auto -p
+```
+
+### bpftrace one-liners
+
+Visualize page faults by process, update every second:
+```
+$ bpftrace -e 'software:faults:1 { @[comm] = count(); } interval:s:1 { print(@); clear(@)}' | hcl -p -s auto
+```
+
+### perf one-liners
 For CPU counters, [linux perf](https://perf.wiki.kernel.org/index.php/Main_Page) can be used to print out PMU events.
 
+Show IPC by CPU:
 
 ```
-$ perf stat -a -A -x ',' -e cycles,instructions,branch-misses --log-fd 1 -I 1000
-     1.000644593,CPU0, 6160149,,cycles,1004000000,100.00,,
-     1.000644593,CPU1, 7411186,,cycles,1004000000,100.00,,
-     1.000644593,CPU2, 5117161,,cycles,1004000000,100.00,,
-     1.000644593,CPU3, 5025018,,cycles,1004000000,100.00,,
-     1.000644593,CPU4, 4781416,,cycles,1004000000,100.00,,
-     1.000644593,CPU5, 5511300,,cycles,1004000000,100.00,,
-     1.000644593,CPU6, 4865673,,cycles,1004000000,100.00,,
-     1.000644593,CPU7, 5189923,,cycles,1004000000,100.00,,
-     1.000644593,CPU0, 3482091,,instructions,1004000000,100.00,0.57,insn per cycle
-     1.000644593,CPU1, 3978030,,instructions,1004000000,100.00,0.65,insn per cycle
-     1.000644593,CPU2, 3039905,,instructions,1004000000,100.00,0.49,insn per cycle
-     1.000644593,CPU3, 2959086,,instructions,1004000000,100.00,0.48,insn per cycle
-    ...
+$ perf stat -a -A -x ',' -e cycles,instructions --log-fd 1 -I 1000 | awk -v cores=`getconf _NPROCESSORS_ONLN` -F',' -W interactive '$0 ~ /instructions/ {print $2":"$8; if (NR % cores == 0) { print ""; } }' | hcl -p -s 2
 ```
-
-produces a data series with instructions/cycles/branch-misses per each CPU available, writing new data every second.
-perf.sh script implodes data into CSV format compatible with hcl;
-
-```
-$ scripts/perf/perf.sh | hcl -x time
-```
-
-![perf demo](https://github.com/okuvshynov/hcl/raw/master/static/perf.gif "perf demo")
 
 ### other use-cases
 In theory, HCL can handle many use-cases, like

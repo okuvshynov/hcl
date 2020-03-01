@@ -10,10 +10,7 @@ use termion::{
 };
 
 use crate::{
-    app::{
-        settings::{FetchMode, Settings},
-        window::WindowAdjust,
-    },
+    app::{settings::Settings, window::WindowAdjust},
     data::{
         fetcher::{FetcherError, FetcherLoop},
         series::{SeriesSet, Slice},
@@ -29,7 +26,6 @@ use crate::{
 pub enum Message {
     KeyPress(Key),
     MousePress((MouseButton, u16)), // button and x
-    Data(SeriesSet),
     DataSlice(Slice),
     ExtendDataSet(SeriesSet),
     Tick,
@@ -127,17 +123,8 @@ impl EventLoop {
             }
         });
 
-        let fetch_mode = settings.fetch_mode();
         event_loop.add(move |sender: mpsc::Sender<Message>| -> Result<(), Error> {
-            // Fetch once anyway
             sender.send(Message::Tick)?;
-            // 0 means 'never refresh', just keep tailing
-            if let FetchMode::Autorefresh(rate) = fetch_mode {
-                loop {
-                    std::thread::sleep(rate);
-                    sender.send(Message::Tick)?;
-                }
-            }
             return Ok(());
         });
 
@@ -148,24 +135,19 @@ impl EventLoop {
                 // series might be reordered as a result of this operation.
                 Message::ExtendDataSet(d) => {
                     event_loop.state.extend_dataset(d, surface.width()?);
-                    surface.render(&event_loop.state, &settings)?;
+                    surface.render(&event_loop.state)?;
                 }
                 // Append new slice to the existing set of columns.
                 Message::DataSlice(s) => {
                     event_loop.state.append_slice(s, surface.width()?);
-                    surface.render(&event_loop.state, &settings)?;
-                }
-                // Replace whole data; used with periodic refresh mode.
-                Message::Data(d) => {
-                    event_loop.state.replace_data(d, surface.width()?);
-                    surface.render(&event_loop.state, &settings)?;
+                    surface.render(&event_loop.state)?;
                 }
                 // Handle fetching error.
                 Message::FetchError(e) => {
                     // error will be cleared on next successful data fetch
                     event_loop.state.on_error(format!("{}", e));
                     // we need to render to show 'error' to user.
-                    surface.render(&event_loop.state, &settings)?;
+                    surface.render(&event_loop.state)?;
                 }
                 // periodic refresh.
                 Message::Tick => event_loop.fetcher_loop.fetch(),
@@ -173,7 +155,7 @@ impl EventLoop {
                 // mouse event; includes both press/scroll.
                 Message::MousePress((b, x)) => {
                     if event_loop.on_mouse_press(b, x as i64, surface.width()?, surface.height()?) {
-                        surface.render(&event_loop.state, &settings)?;
+                        surface.render(&event_loop.state)?;
                     }
                 }
                 // key events; 'exit' handled right here, everything else - in dedicated handler.
@@ -183,7 +165,7 @@ impl EventLoop {
                         break;
                     }
                     if event_loop.on_key_press(input, surface.width()?, surface.height()?) {
-                        surface.render(&event_loop.state, &settings)?;
+                        surface.render(&event_loop.state)?;
                     }
                 }
             }
