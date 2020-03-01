@@ -212,41 +212,35 @@ cpu by executable name:
 atop -PPRC -r -b 11:00 | awk '{if ($8 != "") { if ($11+$12>0)print $8":"$11+$12; } else {print "";}}' | hcl -p -s auto
 ```
 
-### dtrace
+### dtrace oneliners
 
-[dtrace](http://dtrace.org/blogs/about/) could work together with hcl and display dynamic tracing information in realtime. The following example is from running dtrace on MacOS 
-
-```
-sudo ./scripts/dtrace/io_size.d | hcl -x time -s 50
-```
-
-This traces all disk IO events and shows how the distribution of the size of the IO operation is changing over time.
-Series names (1k, 2k, ...) mean 'IO of this size in bytes', and each value in the chart represent 'how many IO operations of this size happened during that second'. Custom script is created to report the distribution in CSV format, rather than default dtrace aggregation representation.
-
-![dtrace demo](https://github.com/okuvshynov/hcl/raw/master/static/dtrace.png "dtrace demo")
-
-#### one-liners
+hcl can work with [dtrace](http://dtrace.org/blogs/about/) and display dynamic tracing information in realtime. The following example is from running dtrace on MacOS 
 
 syscalls count by syscall
 ```
-dtrace -q -n 'syscall:::entry { @n[probefunc] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+$ dtrace -q -n 'syscall:::entry { @n[probefunc] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
 ```
 
 io count by executable name
 ```
-dtrace -q -n 'io:::start { @n[execname] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+$ dtrace -q -n 'io:::start { @n[execname] = count(); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
 ```
 
 io size by executable name
 ```
-dtrace -q -n 'io:::start { @n[execname] = sum(args[0]->b_bcount); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+$ dtrace -q -n 'io:::start { @n[execname] = sum(args[0]->b_bcount); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
+```
+
+io size distribution
+```
+$ dtrace -q -n 'io:::start { @ = quantize(args[0]->b_bcount); } profile:::tick-1sec { printa("%@d", @); clear(@)} profile:::tick-10s {exit(0);}' | awk '{if (NF==3) print (0+$1)":"(0+$3); if ($0=="") print "";}' | hcl -s auto -p
 ```
 
 ### bpftrace one-liners
 
 Visualize page faults by process, update every second:
 ```
-bpftrace -e 'software:faults:1 { @[comm] = count(); } interval:s:1 { print(@); clear(@)}' | hcl -p -s auto
+$ bpftrace -e 'software:faults:1 { @[comm] = count(); } interval:s:1 { print(@); clear(@)}' | hcl -p -s auto
 ```
 
 ### perf one-liners
