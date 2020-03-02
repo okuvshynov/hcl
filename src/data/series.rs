@@ -182,6 +182,7 @@ mod tests {
         };
 
         old.append_set(new);
+        old.order_by(&SortingMode::ValuesDesc);
 
         assert_eq!(old.y.len(), 2);
         assert_eq!(old.y[1].title, "a".to_owned());
