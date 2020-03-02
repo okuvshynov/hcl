@@ -1,4 +1,4 @@
-use crate::app::settings::Settings;
+use crate::app::settings::{Settings, SortingMode};
 use crate::app::window::{Window, WindowAdjust};
 use crate::data::scale_config::ScalesConfig;
 use crate::data::series::{SeriesSet, Slice};
@@ -12,6 +12,7 @@ pub struct State {
     pub scales: Option<ScalesConfig>,
     auto: bool,
     show_cursor: bool,
+    sort_mode: SortingMode,
 }
 
 impl State {
@@ -27,7 +28,8 @@ impl State {
                 .map(String::as_str)
                 .map(|s| ScalesConfig::new(s).unwrap()),
             auto: true,
-            show_cursor: false,
+            show_cursor: true,
+            sort_mode: settings.sort_mode.clone(),
         }
     }
 
@@ -63,6 +65,7 @@ impl State {
     pub fn extend_dataset(&mut self, d: SeriesSet, width: i64) {
         self.error_message = None;
         self.data.append_set(d);
+        self.data.order_by(&self.sort_mode);
         let mut xm = WindowAdjust::new(self.data.series_size(), width, &mut self.x);
         xm.on_data();
         if self.auto {

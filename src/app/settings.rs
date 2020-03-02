@@ -1,10 +1,14 @@
-use std::time::Duration;
-
 #[derive(Clone, PartialEq)]
 pub enum Column {
     Index(usize),
     Title(String),
     None,
+}
+
+#[derive(Debug, Clone)]
+pub enum SortingMode {
+    ValuesDesc,
+    TitlesNumericAsc,
 }
 
 impl Column {
@@ -18,9 +22,9 @@ impl Column {
 }
 
 pub struct Settings {
-    pub cmd: Option<Vec<String>>,
-    pub refresh_rate: Duration,
+    pub input_file: Option<String>,
     pub x: Column,
     pub scales: Option<String>,
     pub paired: bool,
+    pub sort_mode: SortingMode,
 }

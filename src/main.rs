@@ -1,10 +1,9 @@
 mod app;
 mod data;
-mod platform;
 mod ui;
 
 use crate::data::scale_config::ScalesConfig;
-use app::settings::{Column, Settings};
+use app::settings::{Column, Settings, SortingMode};
 use clap::{App, AppSettings, Arg, ArgGroup};
 
 fn main() -> Result<(), failure::Error> {
@@ -19,9 +18,14 @@ fn main() -> Result<(), failure::Error> {
                 .help("use by pair format instead of csv"),
         )
         .arg(
+            Arg::with_name("t")
+                .short("t")
+                .help("sort by titles (numerically). Useful for distribution plotting."),
+        )
+        .arg(
             Arg::with_name("x")
                 .short("x")
-                .help("name of the field to use for X axis values.")
+                .help("name of the series to use for X axis values.")
                 .takes_value(true),
         )
         .arg(
@@ -36,17 +40,6 @@ fn main() -> Result<(), failure::Error> {
                 .takes_value(true),
         )
         .group(ArgGroup::with_name("xg").args(&["x", "i"]).required(false))
-        .arg(
-            Arg::with_name("r")
-                .short("r")
-                .help("refresh rate, milliseconds. 0 for no refresh.")
-                .validator(|v| {
-                    v.parse::<u64>()
-                        .map(|_| ())
-                        .map_err(|_| "unable to parse".to_owned())
-                })
-                .default_value("0"),
-        )
         .arg(
             Arg::with_name("scales")
                 .short("s")
@@ -89,20 +82,17 @@ another single shared autoscale.
                 })
                 .takes_value(true),
         )
-        .arg(Arg::with_name("command").multiple(true))
+        .arg(Arg::with_name("input_file"))
         .get_matches();
-
-    let r = matches.value_of("r").unwrap().parse::<u64>().unwrap();
 
     let x = (matches.value_of("x"), matches.value_of("i"));
 
-    let cmd = matches
-        .values_of("command")
+    let input_file = matches
+        .values_of("input_file")
         .map(|o| o.map(ToOwned::to_owned).collect());
 
     let settings = Settings {
-        cmd,
-        refresh_rate: std::time::Duration::from_millis(r),
+        input_file,
         scales: matches.value_of("scales").map(ToOwned::to_owned),
         x: match x {
             (Some(title), None) => Column::Title(title.to_owned()),
@@ -110,6 +100,11 @@ another single shared autoscale.
             _ => Column::None,
         },
         paired: matches.is_present("p"),
+        sort_mode: if matches.is_present("t") {
+            SortingMode::TitlesNumericAsc
+        } else {
+            SortingMode::ValuesDesc
+        },
     };
 
     app::event_loop::EventLoop::start(settings)

@@ -28,7 +28,6 @@ pub enum Message {
     MousePress((MouseButton, u16)), // button and x
     DataSlice(Slice),
     ExtendDataSet(SeriesSet),
-    Tick,
     FetchError(FetcherError),
 }
 
@@ -123,10 +122,7 @@ impl EventLoop {
             }
         });
 
-        event_loop.add(move |sender: mpsc::Sender<Message>| -> Result<(), Error> {
-            sender.send(Message::Tick)?;
-            return Ok(());
-        });
+        event_loop.fetcher_loop.fetch();
 
         // main event loop
         loop {
@@ -149,9 +145,6 @@ impl EventLoop {
                     // we need to render to show 'error' to user.
                     surface.render(&event_loop.state)?;
                 }
-                // periodic refresh.
-                Message::Tick => event_loop.fetcher_loop.fetch(),
-
                 // mouse event; includes both press/scroll.
                 Message::MousePress((b, x)) => {
                     if event_loop.on_mouse_press(b, x as i64, surface.width()?, surface.height()?) {
