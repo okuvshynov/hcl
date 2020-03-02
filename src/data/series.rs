@@ -1,6 +1,8 @@
 use std::f64::NAN;
 use std::iter;
 
+use crate::app::settings::SortingMode;
+
 #[derive(Debug, Clone)]
 pub struct Series {
     pub title: String,
@@ -93,14 +95,18 @@ impl SeriesSet {
         if let (Some((_, xo)), Some((_, xn))) = (self.x.as_mut(), other.x.as_mut()) {
             xo.append(xn);
         }
-        self.order_by();
+        //self.order_by(SortingMode::TitlesNumericAsc);
     }
 
-    // TODO: non-desc ordering
-    fn order_by(&mut self) {
-        self.y.sort_by_cached_key(|a| {
-            -(a.values.iter().filter(|v| !v.is_nan()).sum::<f64>() * 1.0e9) as i64
-        });
+    pub fn order_by(&mut self, mode: &SortingMode) {
+        match mode {
+            SortingMode::ValuesDesc => self.y.sort_by_cached_key(|a| {
+                -(a.values.iter().filter(|v| !v.is_nan()).sum::<f64>() * 1.0e9) as i64
+            }),
+            SortingMode::TitlesNumericAsc => {
+                self.y.sort_by_key(|a| a.title.parse::<i64>().unwrap_or(0))
+            }
+        }
     }
 }
 

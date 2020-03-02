@@ -3,8 +3,8 @@
 Horizon charts provide a nice balance between information density and clarity in the case of multiple time series.
 Interactive examples of horizon charts can be found on [observable](https://observablehq.com/@d3/horizon-chart-ii) and, specifically for system monitoring, in [Square's cubism](https://square.github.io/cubism/). 
 
-hcl (Horizon CLi) is a command-line application that reads data in CSV format and presents it as an interactive group of horizon charts right in the terminal. 
-You can think of it as a chart version of a ```less +F``` for numeric CSV data.
+hcl (Horizon CLi) is a command-line tool for visualizing arbitrary data in horizon format.
+You can think of it as a chart version of a ```less +F``` for numeric data.
 
 Obvious example of a load monitor:
 
@@ -29,16 +29,10 @@ Coming soon; Once CI is set up, they'll be here;
 
 ### Data fetching
 
-hcl reads data in CSV format, either from stdin or as a result of another command execution.
-There're two main modes of operation: incremental fetch and full replacement. 
+hcl reads data in two formats:
+1) [default] CSV-like, with comma-separated values. Each column in the file represents individual series, and each row in the file becomes a 'column' in the chart: [example](tests/sine.csv)
+2) title:value pairs; Empty line represents a separator between different 'columns' in the chart: [example](tests/rt_two_col.sh)
 
-In case of full replacement, the data is read until EOF, and old data is dropped.
-To use the mode, supply -r <frequency_ms> argument:
-``` 
-$ hcl -r 1000 ./some.sh # read stdout of some.sh, overwrite old data; repeat every 1 second
-```
-
-An alternative 'incremental' mode appends whatever is read to each series. It's very natural with a pipe, but can be used with command execution as well - just do not supply -r.
 ```
 $ some.sh | hcl # read line-by-line and append as soon as the new line arrives.
 ```
@@ -49,7 +43,7 @@ $ hcl some.sh
 
 There's a way to modify series set in incremental mode, by inserting empty line and a new set of titles. This can be useful in the cases like 'show top N processes reading from HDD, with 1 second granularity'. Check this simple [example](tests/rt_new_series.sh) which simulates that.
 
-There's an option to use one of the columns in CSV as an 'x' axis. Most commonly that would be some form of
+There's an option to use one of the columns as an 'x' axis. Most commonly that would be some form of
 time/date, but it's not required, it can be an arbitrary string. X is configured using -x <column_title> or -i <column_index_zero_based> options.
 
 All other columns need to have floating-point numbers as their values. Missing values or the ones failed to parse will be represented as '.' (NaN).
@@ -124,23 +118,25 @@ Autoscale is recomputed on every data update, as new values might change the int
 Autoscaling has its drawbacks, specifically old data might change its appearance as new data arrives, which could look confusing; 
 Thus, it's often a better option to provide scale as an input. '-s core:100' will be sufficient for the example above.
 
+'-s auto' is a way to treat all series together, and pick scale automatically for all of them.
+
 ### Command-line arguments
 
 USAGE:
-* hcl [OPTIONS] [command]...
+* hcl [OPTIONS] [input_file]
 
 FLAGS:
 * -h, --help       Prints help information;
 * -V, --version    Prints version information.
+* -p               Use key:value pair format instead of CSV
 
 OPTIONS:
 * -i <index>         index of the field to use for X axis values. Only one of -i/-x can be used;
-* -r <rate>          refresh rate, milliseconds. 0 for no refresh. [default: 0];
 * -s <scales>        scale information, global and per series, according to scale format above;
 * -x <x>             name of the field to use for X axis values. Only one of -i/-x can be used.
 
 ARGS:
-    <command>...
+    <input_file>
 
 ### Interactive commands
 
@@ -207,7 +203,7 @@ top 3 processes by RAM:
 $ atopsar -G -S -b 21:35 | awk '! /_top3_/ && $1 ~ /[0-9][0-9]:[0-9][0-9]/ { print "t," $3 "-" $2 "," $7 "-" $6 "," $11 "-" $10 "\n" $1","$4+0","$8+0","$12+0"\n"}' | hcl -x t
 ```
 
-cpu by executable name:
+cpu usage by executable name since 11am:
 ```
 atop -PPRC -r -b 11:00 | awk '{if ($8 != "") { if ($11+$12>0)print $8":"$11+$12; } else {print "";}}' | hcl -p -s auto
 ```
@@ -231,7 +227,7 @@ io size by executable name
 $ dtrace -q -n 'io:::start { @n[execname] = sum(args[0]->b_bcount); } profile:::tick-1sec { printa("%S:%@d\n", @n); printf("\n"); clear(@n)}' | hcl -p -s auto
 ```
 
-io size distribution
+Collect io size distribution for 10 seconds and show the result.
 ```
 $ dtrace -q -n 'io:::start { @ = quantize(args[0]->b_bcount); } profile:::tick-1sec { printa("%@d", @); clear(@)} profile:::tick-10s {exit(0);}' | awk '{if (NF==3) print (0+$1)":"(0+$3); if ($0=="") print "";}' | hcl -s auto -p
 ```

@@ -17,7 +17,7 @@ pub struct FetcherLoop {
 }
 
 pub struct FetcherSettings {
-    pub cmd: Option<String>,
+    pub input_file: Option<String>,
     pub x: Column,
     pub paired: bool,
 }
@@ -30,7 +30,7 @@ impl FetcherLoop {
         let (to_fetcher, from_main_loop) = mpsc::channel();
         let fetcher = ContinuousFetcher::new();
         let fetcher_settings = FetcherSettings {
-            cmd: settings.cmd.as_ref().map(|v| v.join(" ")),
+            input_file: settings.input_file.clone(),
             x: settings.x.clone(),
             paired: settings.paired,
         };

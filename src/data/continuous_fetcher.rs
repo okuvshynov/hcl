@@ -3,8 +3,8 @@ use crate::app::settings::Column;
 use crate::data::fetcher::{Fetcher, FetcherError, FetcherEvent, FetcherSettings};
 use crate::data::schema::Schema;
 use crate::data::series::{SeriesSet, Slice};
-use crate::platform::exec::spawned_stdout;
 
+use std::fs::File;
 use std::io::stdin;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -192,10 +192,10 @@ impl ContinuousFetcher {
         from_main_loop: mpsc::Receiver<FetcherEvent>,
         to_main_loop: &mpsc::Sender<Message>,
     ) -> Result<(), FetcherError> {
-        if let Some(cmd) = settings.cmd.as_ref() {
+        if let Some(input_file) = settings.input_file.as_ref() {
             ContinuousFetcher::read_from(
                 &settings,
-                spawned_stdout(&cmd)?,
+                File::open(&input_file)?,
                 from_main_loop,
                 &to_main_loop,
             )
