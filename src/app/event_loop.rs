@@ -12,7 +12,7 @@ use termion::{
 use crate::{
     app::{settings::Settings, window::WindowAdjust},
     data::{
-        fetcher::{FetcherError, FetcherLoop},
+        fetcher_loop::{FetcherError, FetcherLoop},
         series::{SeriesSet, Slice},
         state::State,
     },
@@ -168,7 +168,7 @@ impl EventLoop {
     }
 
     // add new 'event producer'
-    pub fn add<F>(&self, producer: F) -> &EventLoop
+    fn add<F>(&self, producer: F) -> &EventLoop
     where
         F: Fn(mpsc::Sender<Message>) -> Result<(), Error>,
         F: std::marker::Send,

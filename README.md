@@ -6,10 +6,6 @@ Interactive examples of horizon charts can be found on [observable](https://obse
 hcl (Horizon CLi) is a command-line tool for visualizing arbitrary data in horizon format.
 You can think of it as a chart version of a ```less +F``` for numeric data.
 
-Obvious example of a load monitor:
-
-![atop demo](https://github.com/okuvshynov/hcl/raw/master/static/atop.gif "atop demo")
-
 ## Installation
 
 ### Build from source
@@ -33,22 +29,27 @@ hcl reads data in two formats:
 1) [default] CSV-like, with comma-separated values. Each column in the file represents individual series, and each row in the file becomes a 'column' in the chart: [example](tests/sine.csv)
 2) title:value pairs; Empty line represents a separator between different 'columns' in the chart: [example](tests/rt_two_col.sh)
 
+Data is provided to hcl either by piping it to stdin, or by providing file name as a last argument.
+
+
 ```
-$ some.sh | hcl # read line-by-line and append as soon as the new line arrives.
+$ cat tests/sine.csv | hcl 
 ```
 Equivalent to
 ```
-$ hcl some.sh
+$ hcl tests/sine.csv
 ```
 
-There's a way to modify series set in incremental mode, by inserting empty line and a new set of titles. This can be useful in the cases like 'show top N processes reading from HDD, with 1 second granularity'. Check this simple [example](tests/rt_new_series.sh) which simulates that.
+If empty line is encountered, new set of titles is expected. hcl will attempt to 'merge' the data after that, filling missing values with NaN.
+This can be useful in the cases like 'show top N processes reading from HDD, with 1 second granularity', when set of 'top N' might be different every time.
+ Check this simple [example](tests/rt_new_series.sh) which simulates that.
 
 There's an option to use one of the columns as an 'x' axis. Most commonly that would be some form of
-time/date, but it's not required, it can be an arbitrary string. X is configured using -x <column_title> or -i <column_index_zero_based> options.
+time/date, but it's not required - it can be an arbitrary string. X is configured using -x <column_title> option.
 
 All other columns need to have floating-point numbers as their values. Missing values or the ones failed to parse will be represented as '.' (NaN).
 
-There's no filtering/aggregation functionality. If there's a need to do so, external tools (awk, xsv, sed, ...) should be used before piping the input to hcl.
+There's no filtering/aggregation functionality. If there's a need to do so, external tool (awk, xsv, sed, ...) should be used before piping the input to hcl.
 
 ### Scales
 The scale is a piecewise linear map from an input domain to [-1;0] and [0;1] intervals. [-1;1] values will be mapped to Unicode block characters, full dark green representing '1' and full dark red representing '-1'.
@@ -57,7 +58,7 @@ Scales are defined in a comma-separated list, for example
 ```
 0..10,cpu:100,ram:32G,cycles:auto
 ```
-There're three scales here, one global [0..10], one with 'cpu' pattern, another with 'ram' pattern.
+There're four scales here, one global [0..10], one with 'cpu' pattern, another with 'ram' pattern, and an autoscale for 'cycles' pattern.
        
 Input domain for the scale is repesented by two intervals: [a;b] and [b;c].
 [a;b] is mapped to [-1;0] and [b;c] is mapped to [0;1].
@@ -83,7 +84,8 @@ Complete example:
 
 ### Autoscaling
 
-Autoscaling is an attempt to provide reasonable default behavior. Autoscaling works on individual series level. After iterating over all values in a series, following logic is applied:
+Autoscaling is an attempt to provide reasonable default behavior. Autoscaling works on individual series level by default; '-s auto' would force global autoscale.
+After iterating over all values in a series, following logic is applied:
 * if there's no data at all, return identity map [0;1] -> [0;1];
 * if there're only zeroes in the data, return identity map;
 * if both positive and negative values are present, find min and max values, and use piecewise mapping [min; 0; max] -> [-1; 0; 1];
@@ -110,15 +112,18 @@ If, instead, we do ```cat load.csv | hcl -s cpu:auto```, both cpu series will be
 In case of cpu load, which often is represented as percentage, it might be easier to just specify 'cpu:100'.
 For counters which might have no obviously good upper bound, auto could be benefitial. 
 For example:
- * distribution of wait time in scheduler queue
- * number of context switches
- * CPU PMU counters: cycles, instructions, cache-misses, etc. There's a way to compute 'theoretical' upper bounds for some of those, but auto often works well.
+ * distribution of wait time in scheduler queue;
+ * number of context switches;
+ * CPU PMU counters: cycles, instructions, cache-misses, etc. 
 
 Autoscale is recomputed on every data update, as new values might change the interval boundaries;
 Autoscaling has its drawbacks, specifically old data might change its appearance as new data arrives, which could look confusing; 
 Thus, it's often a better option to provide scale as an input. '-s core:100' will be sufficient for the example above.
 
-'-s auto' is a way to treat all series together, and pick scale automatically for all of them.
+'-s auto' is a way to treat all series together, and pick a single scale for all of them.
+
+### Series ordering
+In progress;
 
 ### Command-line arguments
 
@@ -129,9 +134,9 @@ FLAGS:
 * -h, --help       Prints help information;
 * -V, --version    Prints version information.
 * -p               Use key:value pair format instead of CSV
+* -t               sort by titles (numerically). Useful for distribution plotting.
 
 OPTIONS:
-* -i <index>         index of the field to use for X axis values. Only one of -i/-x can be used;
 * -s <scales>        scale information, global and per series, according to scale format above;
 * -x <x>             name of the field to use for X axis values. Only one of -i/-x can be used.
 
