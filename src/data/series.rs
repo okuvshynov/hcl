@@ -95,7 +95,6 @@ impl SeriesSet {
         if let (Some((_, xo)), Some((_, xn))) = (self.x.as_mut(), other.x.as_mut()) {
             xo.append(xn);
         }
-        //self.order_by(SortingMode::TitlesNumericAsc);
     }
 
     pub fn order_by(&mut self, mode: &SortingMode) {

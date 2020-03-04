@@ -1,89 +1,214 @@
 use crate::app::event_loop::Message;
-use crate::app::settings::{Column, Settings};
-use crate::data::continuous_fetcher::ContinuousFetcher;
+use crate::app::settings::Column;
+use crate::data::fetcher_loop::{FetcherError, FetcherEvent, FetcherSettings};
+use crate::data::schema::Schema;
+use crate::data::series::{SeriesSet, Slice};
 
+use std::fs::File;
+use std::io::stdin;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Lines;
+use std::io::Read;
 use std::sync::mpsc;
 
-pub enum FetcherEvent {
-    Tick,
-    Pause,
+trait Reader {
+    fn next(&mut self) -> Result<ReaderMessage, FetcherError>;
 }
 
-/// FetcherLoop is responsbile for setting up and maintaining
-/// communication channel between main loop and data reading routines
-/// It spawns a new thread where data reading will happen.
-pub struct FetcherLoop {
-    sender_to_fetcher: mpsc::Sender<FetcherEvent>,
+pub enum ReaderMessage {
+    Extend(SeriesSet),
+    Append(Slice),
+    EOF,
 }
 
-pub struct FetcherSettings {
-    pub input_file: Option<String>,
-    pub x: Column,
-    pub paired: bool,
+pub struct PairReader<R: Read> {
+    lines: Lines<BufReader<R>>,
+    x: Column,
 }
 
-impl FetcherLoop {
-    pub fn new(
-        to_main_loop: mpsc::Sender<Message>, // where to send fetched data
-        settings: &Settings,
-    ) -> FetcherLoop {
-        let (to_fetcher, from_main_loop) = mpsc::channel();
-        let fetcher = ContinuousFetcher::new();
-        let fetcher_settings = FetcherSettings {
-            input_file: settings.input_file.clone(),
-            x: settings.x.clone(),
-            paired: settings.paired,
-        };
-        fetcher.fetcher_loop(fetcher_settings, from_main_loop, to_main_loop.clone());
-        FetcherLoop {
-            sender_to_fetcher: to_fetcher,
-        }
-    }
-    pub fn fetch(&mut self) {
-        if let Err(_) = self.sender_to_fetcher.send(FetcherEvent::Tick) {
-            // TODO: fetching done. Update status to done
-        }
-    }
-
-    pub fn pause(&mut self) {
-        if let Err(_) = self.sender_to_fetcher.send(FetcherEvent::Pause) {
-            // TODO: fetching done. Update status to done
+impl<R: Read> PairReader<R> {
+    pub fn new(reader: R, x: Column) -> Self {
+        let br = BufReader::new(reader);
+        PairReader::<R> {
+            lines: br.lines(),
+            x,
         }
     }
 }
 
-pub trait Fetcher {
-    fn fetcher_loop(
+impl<R: Read> Reader for PairReader<R> {
+    fn next(&mut self) -> Result<ReaderMessage, FetcherError> {
+        let mut titles = vec![];
+        let mut values = vec![];
+        loop {
+            match self.lines.next() {
+                Some(Ok(l)) => {
+                    if l != "" {
+                        let mut parts = l.split(':').take(2);
+                        match (parts.next(), parts.next()) {
+                            (Some(title), Some(value)) => {
+                                titles.push(title.to_owned());
+                                values.push(value.to_owned());
+                            }
+                            _ => {}
+                        };
+                    } else {
+                        // TODO: cleanup
+                        // empty line, flush
+                        if titles.len() > 0 {
+                            let schema = Schema::from_title_range(self.x.clone(), &titles);
+                            let mut data = schema.empty_set();
+                            data.append_slice(schema.slice_from_range(&values));
+                            return Ok(ReaderMessage::Extend(data));
+                        } else {
+                            return Ok(ReaderMessage::Extend(SeriesSet::default()));
+                        }
+                    }
+                }
+                _ => {
+                    if titles.len() > 0 {
+                        let schema = Schema::from_title_range(self.x.clone(), &titles);
+                        let mut data = schema.empty_set();
+                        data.append_slice(schema.slice_from_range(&values));
+                        return Ok(ReaderMessage::Extend(data));
+                    } else {
+                        return Ok(ReaderMessage::EOF);
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub struct LineReader<R: Read> {
+    lines: Lines<BufReader<R>>,
+    schema: Option<Schema>,
+    x: Column,
+}
+
+impl<R: Read> LineReader<R> {
+    pub fn new(reader: R, x: Column) -> Self {
+        let br = BufReader::new(reader);
+        LineReader::<R> {
+            lines: br.lines(),
+            schema: None,
+            x,
+        }
+    }
+}
+
+impl<R: Read> Reader for LineReader<R> {
+    fn next(&mut self) -> Result<ReaderMessage, FetcherError> {
+        loop {
+            match self.lines.next() {
+                Some(Ok(l)) => {
+                    if l == "" {
+                        self.schema = None;
+                        continue;
+                    }
+                    match self.schema.as_ref() {
+                        None => {
+                            self.schema = Some(Schema::from_titles(self.x.clone(), &l));
+                            return Ok(ReaderMessage::Extend(
+                                self.schema.as_ref().unwrap().empty_set(),
+                            ));
+                        }
+                        Some(schema) => return Ok(ReaderMessage::Append(schema.slice(&l))),
+                    }
+                }
+                _ => return Ok(ReaderMessage::EOF),
+            }
+        }
+    }
+}
+
+pub struct Fetcher {}
+
+impl Fetcher {
+    pub fn new() -> Fetcher {
+        Fetcher {}
+    }
+
+    fn loop_with_reader(
+        mut reader: impl Reader,
+        from_main_loop: mpsc::Receiver<FetcherEvent>,
+        to_main_loop: &mpsc::Sender<Message>,
+    ) -> Result<(), FetcherError> {
+        loop {
+            Fetcher::check_pause(&from_main_loop);
+            match reader.next()? {
+                ReaderMessage::EOF => return Ok(()),
+                ReaderMessage::Append(slice) => {
+                    to_main_loop.send(Message::DataSlice(slice)).unwrap()
+                }
+                ReaderMessage::Extend(set) => {
+                    to_main_loop.send(Message::ExtendDataSet(set)).unwrap()
+                }
+            }
+        }
+    }
+
+    fn read_from(
+        settings: &FetcherSettings,
+        reader: impl Read,
+        from_main_loop: mpsc::Receiver<FetcherEvent>,
+        to_main_loop: &mpsc::Sender<Message>,
+    ) -> Result<(), FetcherError> {
+        if settings.paired {
+            Self::loop_with_reader(
+                PairReader::new(reader, settings.x.clone()),
+                from_main_loop,
+                to_main_loop,
+            )
+        } else {
+            Self::loop_with_reader(
+                LineReader::new(reader, settings.x.clone()),
+                from_main_loop,
+                to_main_loop,
+            )
+        }
+    }
+
+    // checks if pause was received and blocks until unpaused
+    fn check_pause(from_main_loop: &mpsc::Receiver<FetcherEvent>) {
+        if let Ok(FetcherEvent::Pause) = from_main_loop.try_recv() {
+            loop {
+                if let Ok(FetcherEvent::Pause) = from_main_loop.recv() {
+                    break;
+                }
+            }
+        }
+    }
+
+    fn read(
+        settings: FetcherSettings,
+        from_main_loop: mpsc::Receiver<FetcherEvent>,
+        to_main_loop: &mpsc::Sender<Message>,
+    ) -> Result<(), FetcherError> {
+        if let Some(input_file) = settings.input_file.as_ref() {
+            Fetcher::read_from(
+                &settings,
+                File::open(&input_file)?,
+                from_main_loop,
+                &to_main_loop,
+            )
+        } else {
+            let stdin = stdin();
+            Fetcher::read_from(&settings, stdin.lock(), from_main_loop, &to_main_loop)
+        }
+    }
+
+    pub fn fetcher_loop(
         &self,
-        fetcher_settings: FetcherSettings,
+        settings: FetcherSettings,
         from_main_loop: mpsc::Receiver<FetcherEvent>,
         to_main_loop: mpsc::Sender<Message>,
-    );
-}
-
-#[derive(Debug)]
-pub enum FetcherError {
-    IO(std::io::Error),
-    CSV(csv::Error),
-}
-
-impl From<std::io::Error> for FetcherError {
-    fn from(err: std::io::Error) -> FetcherError {
-        FetcherError::IO(err)
-    }
-}
-
-impl From<csv::Error> for FetcherError {
-    fn from(err: csv::Error) -> FetcherError {
-        FetcherError::CSV(err)
-    }
-}
-
-impl std::fmt::Display for FetcherError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match *self {
-            FetcherError::IO(ref err) => write!(f, "IO error: {}", err),
-            FetcherError::CSV(ref err) => write!(f, "CSV parse error: {}", err),
-        }
+    ) {
+        std::thread::spawn(move || {
+            if let Err(e) = Fetcher::read(settings, from_main_loop, &to_main_loop) {
+                to_main_loop.send(Message::FetchError(e)).unwrap();
+            }
+        });
     }
 }

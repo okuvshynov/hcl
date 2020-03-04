@@ -28,17 +28,6 @@ fn main() -> Result<(), failure::Error> {
                 .help("name of the series to use for X axis values.")
                 .takes_value(true),
         )
-        .arg(
-            Arg::with_name("i")
-                .short("i")
-                .help("index of the field to use for X axis values.")
-                .validator(|v| {
-                    v.parse::<u64>()
-                        .map(|_| ())
-                        .map_err(|_| "unable to parse".to_owned())
-                })
-                .takes_value(true),
-        )
         .group(ArgGroup::with_name("xg").args(&["x", "i"]).required(false))
         .arg(
             Arg::with_name("scales")
@@ -85,8 +74,6 @@ another single shared autoscale.
         .arg(Arg::with_name("input_file"))
         .get_matches();
 
-    let x = (matches.value_of("x"), matches.value_of("i"));
-
     let input_file = matches
         .values_of("input_file")
         .map(|o| o.map(ToOwned::to_owned).collect());
@@ -94,9 +81,8 @@ another single shared autoscale.
     let settings = Settings {
         input_file,
         scales: matches.value_of("scales").map(ToOwned::to_owned),
-        x: match x {
-            (Some(title), None) => Column::Title(title.to_owned()),
-            (None, Some(index)) => Column::Index(index.parse::<usize>().unwrap()),
+        x: match matches.value_of("x") {
+            Some(title) => Column::Title(title.to_owned()),
             _ => Column::None,
         },
         paired: matches.is_present("p"),

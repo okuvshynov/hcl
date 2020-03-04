@@ -1,5 +1,6 @@
 #[derive(Clone, PartialEq)]
 pub enum Column {
+    #[allow(dead_code)]
     Index(usize),
     Title(String),
     None,
