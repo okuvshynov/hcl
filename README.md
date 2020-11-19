@@ -1,5 +1,7 @@
 # HCL
 
+![vmstat demo](https://github.com/okuvshynov/hcl/raw/master/static/vmstat.png "vmstat demo")
+
 Horizon charts provide a nice balance between information density and clarity in the case of multiple time series.
 Interactive examples of horizon charts can be found on [observable](https://observablehq.com/@d3/horizon-chart-ii) and, specifically for system monitoring, in [Square's cubism](https://square.github.io/cubism/). 
 
